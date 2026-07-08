@@ -18,6 +18,12 @@ from movement_rules import is_legal_move, move_duration_ms, pawn_promotion_row  
 # in flight.
 PendingMove = namedtuple("PendingMove", ["from_row", "from_col", "to_row", "to_col", "arrival_time", "color"])
 
+# iteration11: a piece that jumped stays on its own cell but is immune
+# to a normal capture for the duration of the jump -- if an enemy move
+# arrives at end_time, it's the enemy that's captured instead.
+AirborneJump = namedtuple("AirborneJump", ["row", "col", "color", "end_time"])
+JUMP_DURATION_MS = 1000
+
 
 class GameState:
     def __init__(self, board):
@@ -26,17 +32,18 @@ class GameState:
         self._clock_ms = 0  # iteration6
         self._pending_moves = []  # iteration6
         self._game_over = False  # iteration9
+        self._airborne = []  # iteration11
 
     def board(self):
-        self._settle_due_moves()  # iteration6
+        self._settle()  # iteration6, iteration11
         return self._board
 
     def is_game_over(self):  # iteration9
-        self._settle_due_moves()
+        self._settle()
         return self._game_over
 
     def handle_click(self, row, col):
-        self._settle_due_moves()  # iteration6
+        self._settle()  # iteration6, iteration11
 
         if self._game_over:  # iteration9: no further move commands once a king is captured
             return
@@ -47,7 +54,7 @@ class GameState:
         token = self._board.get(row, col)
 
         if self._selected_cell is None:
-            if is_piece(token) and not self._is_moving(row, col):  # iteration7
+            if is_piece(token) and not self._is_locked(row, col):  # iteration7, iteration11
                 self._selected_cell = (row, col)
             return
 
@@ -58,10 +65,11 @@ class GameState:
         # of moving, so a piece can never "capture" its own color. #iteration4
         if is_piece(token) and color_of(token) == color_of(selected_token):
             # iteration7: a piece already in flight can't be (re)selected
-            # -- it can't be redirected mid-route. It's still a friendly
-            # piece occupying that cell though, so the click is simply
-            # ignored rather than falling through to a move attempt.
-            if not self._is_moving(row, col):
+            # -- it can't be redirected mid-route. iteration11: same for
+            # an airborne piece. It's still a friendly piece occupying
+            # that cell though, so the click is simply ignored rather
+            # than falling through to a move attempt.
+            if not self._is_locked(row, col):
                 self._selected_cell = (row, col)
             return
 
@@ -89,9 +97,36 @@ class GameState:
             self._pending_moves.append(PendingMove(selected_row, selected_col, row, col, arrival_time, selected_color))
             self._selected_cell = None
 
+    def handle_jump(self, row, col):
+        # iteration11: jump x y -- names the piece directly, no
+        # selection step involved.
+        self._settle()
+
+        if self._game_over:
+            return
+        if not self._is_inside_board(row, col):
+            return
+
+        token = self._board.get(row, col)
+        if not is_piece(token):
+            return
+        # A moving piece cannot jump, and a piece already airborne can't
+        # be sent to jump again until it lands.
+        if self._is_locked(row, col):
+            return
+
+        self._airborne.append(AirborneJump(row, col, color_of(token), self._clock_ms + JUMP_DURATION_MS))
+
     def handle_wait(self, milliseconds):
         self._clock_ms += milliseconds  # iteration6
-        self._settle_due_moves()  # iteration6
+        self._settle()  # iteration6, iteration11
+
+    def _settle(self):
+        # iteration11: moves are settled (and can trigger an airborne
+        # ambush) before expired jumps are cleared, so a jump ending at
+        # the exact same instant an enemy arrives still intercepts it.
+        self._settle_due_moves()
+        self._settle_due_jumps()
 
     def _settle_due_moves(self):
         # iteration6: apply every pending move whose arrival time has
@@ -110,16 +145,46 @@ class GameState:
             # move is cancelled -- the piece simply stays where it is,
             # same as any other ignored move -- rather than teleporting
             # through/onto whatever is there now.
-            if self._is_move_still_valid(move):
-                # iteration9: capturing a king ends the game -- checked
-                # against whatever is actually being captured here, not
-                # at request time, since iteration8 may have changed it.
-                captured_type = piece_type_of(self._board.get(move.to_row, move.to_col))
-                self._board.move(move.from_row, move.from_col, move.to_row, move.to_col, EMPTY_TOKEN)
-                if captured_type == KING_TYPE:
+            if not self._is_move_still_valid(move):
+                continue
+            # iteration11: compare against the jump's own end_time, not
+            # just "is it still in the airborne list right now" -- a
+            # single wait() can jump the clock past both a jump's
+            # expiry and a later move's arrival in one step, and a jump
+            # that had already ended before this move arrived must not
+            # intercept it, even though it hasn't been pruned yet.
+            airborne_jump = self._find_airborne(move.to_row, move.to_col)
+            if airborne_jump is not None and airborne_jump.end_time >= move.arrival_time:
+                # The destination is only ever airborne AND non-friendly
+                # here (a friendly landing was already cancelled above),
+                # so this is always an enemy ambush -- the arriving
+                # piece is destroyed, the airborne piece never leaves
+                # its cell, and the jump ends immediately.
+                arriving_type = piece_type_of(self._board.get(move.from_row, move.from_col))
+                self._board.set(move.from_row, move.from_col, EMPTY_TOKEN)
+                self._end_airborne(move.to_row, move.to_col)
+                if arriving_type == KING_TYPE:
                     self._game_over = True
-                self._maybe_promote(move)  # iteration10
+                continue
+            # iteration9: capturing a king ends the game -- checked
+            # against whatever is actually being captured here, not
+            # at request time, since iteration8 may have changed it.
+            captured_type = piece_type_of(self._board.get(move.to_row, move.to_col))
+            self._board.move(move.from_row, move.from_col, move.to_row, move.to_col, EMPTY_TOKEN)
+            # iteration11: defensive -- clears a stale (already expired
+            # but not yet pruned) airborne record on the cell that just
+            # changed occupant via an ordinary capture.
+            self._end_airborne(move.to_row, move.to_col)
+            if captured_type == KING_TYPE:
+                self._game_over = True
+            self._maybe_promote(move)  # iteration10
         self._pending_moves = still_pending
+
+    def _settle_due_jumps(self):
+        # iteration11: a jump that reaches end_time without being
+        # ambushed just lands -- the piece never moved, so there's
+        # nothing to apply, just drop its airborne status.
+        self._airborne = [jump for jump in self._airborne if jump.end_time > self._clock_ms]
 
     def _maybe_promote(self, move):
         # iteration10: a pawn that reaches the last row becomes a queen.
@@ -154,3 +219,23 @@ class GameState:
         # color. Same-color pieces may still move concurrently with
         # each other.
         return any(move.color != color for move in self._pending_moves)
+
+    def _is_airborne(self, row, col):
+        # iteration11: true while this cell has a piece mid-jump.
+        return self._find_airborne(row, col) is not None
+
+    def _find_airborne(self, row, col):
+        # iteration11
+        for jump in self._airborne:
+            if jump.row == row and jump.col == col:
+                return jump
+        return None
+
+    def _end_airborne(self, row, col):
+        # iteration11: called when an ambush resolves a jump early.
+        self._airborne = [jump for jump in self._airborne if not (jump.row == row and jump.col == col)]
+
+    def _is_locked(self, row, col):
+        # iteration11: a piece that is moving or airborne can't be
+        # selected, moved, or jumped again until it settles/lands.
+        return self._is_moving(row, col) or self._is_airborne(row, col)

@@ -157,8 +157,13 @@ def is_legal_move(piece_type, board, from_row, from_col, to_row, to_col, empty_t
 # How long a move takes to complete: milliseconds per cell of Chebyshev
 # distance travelled (a 3-cell diagonal costs the same as a 3-cell
 # straight line, matching how _steps already measures distance above).
+# iteration11 correction: duration is driven by the cells crossed
+# *between* source and destination (steps - 1), with a floor of 1 unit
+# so an adjacent move still costs a full MS_PER_CELL. Confirmed against
+# VPL: a 2-cell move takes 1000ms, not 2000ms.
 MS_PER_CELL = 1000
 
 
 def move_duration_ms(delta_row, delta_col):
-    return _steps(delta_row, delta_col) * MS_PER_CELL
+    steps = _steps(delta_row, delta_col)
+    return max(1, steps - 1) * MS_PER_CELL

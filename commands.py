@@ -15,6 +15,7 @@ CLICK = "click"
 WAIT = "wait"
 PRINT = "print"
 PRINT_BOARD_TARGET = "board"
+JUMP = "jump"  # iteration11
 
 CELL_SIZE_PX = 100
 
@@ -33,6 +34,7 @@ def execute_commands(command_token_lists, game_state, output):
         CLICK: lambda args: _handle_click(args, game_state),
         WAIT: lambda args: game_state.handle_wait(int(args[0])),
         PRINT: lambda args: _handle_print(args, game_state, output),
+        JUMP: lambda args: _handle_jump(args, game_state),  # iteration11
     }
     for tokens in command_token_lists:
         if not tokens:
@@ -51,3 +53,9 @@ def _handle_click(args, game_state):
 def _handle_print(args, game_state, output):
     if args and args[0] == PRINT_BOARD_TARGET:
         output(render(game_state.board()))
+
+
+def _handle_jump(args, game_state):  # iteration11
+    x, y = int(args[0]), int(args[1])
+    row, col = pixel_to_cell(x, y)
+    game_state.handle_jump(row, col)
