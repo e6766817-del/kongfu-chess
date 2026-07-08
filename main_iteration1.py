@@ -1,4 +1,4 @@
-# Repo: https://github.com/<your-username>/<your-repo>
+# Repo: https://github.com/e6766817-del/kongfu-chess
 import sys
 
 from commands import execute_commands, parse_commands_section
