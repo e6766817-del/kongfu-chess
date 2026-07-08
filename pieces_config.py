@@ -9,6 +9,8 @@ COLORS = ("w", "b")
 PIECE_TYPES = ("K", "Q", "R", "B", "N", "P")
 EMPTY_TOKEN = "."
 KING_TYPE = "K"  # iteration9: which piece type ends the game when captured
+PAWN_TYPE = "P"  # iteration10
+QUEEN_TYPE = "Q"  # iteration10: what a promoting pawn becomes
 
 
 def build_legal_tokens(colors=COLORS, piece_types=PIECE_TYPES, empty_token=EMPTY_TOKEN):

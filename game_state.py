@@ -8,8 +8,8 @@ by their own modules before reaching here.
 
 from collections import namedtuple  # iteration6
 
-from pieces_config import EMPTY_TOKEN, KING_TYPE, color_of, is_piece, piece_type_of  # iteration3, iteration9
-from movement_rules import is_legal_move, move_duration_ms  # iteration4, iteration6
+from pieces_config import EMPTY_TOKEN, KING_TYPE, PAWN_TYPE, QUEEN_TYPE, color_of, is_piece, piece_type_of  # iteration3, iteration9, iteration10
+from movement_rules import is_legal_move, move_duration_ms, pawn_promotion_row  # iteration4, iteration6, iteration10
 
 # iteration6: a move accepted by handle_click doesn't touch the board
 # right away -- it's recorded here and only applied once the game
@@ -118,7 +118,17 @@ class GameState:
                 self._board.move(move.from_row, move.from_col, move.to_row, move.to_col, EMPTY_TOKEN)
                 if captured_type == KING_TYPE:
                     self._game_over = True
+                self._maybe_promote(move)  # iteration10
         self._pending_moves = still_pending
+
+    def _maybe_promote(self, move):
+        # iteration10: a pawn that reaches the last row becomes a queen.
+        moved_token = self._board.get(move.to_row, move.to_col)
+        if piece_type_of(moved_token) != PAWN_TYPE:
+            return
+        board_height, _ = self._board.dimensions()
+        if move.to_row == pawn_promotion_row(move.color, board_height):
+            self._board.set(move.to_row, move.to_col, move.color + QUEEN_TYPE)
 
     def _is_move_still_valid(self, move):
         # iteration8

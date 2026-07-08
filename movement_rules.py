@@ -10,6 +10,8 @@ is treated as unrestricted, so piece types not covered by this
 iteration (e.g. pawns) keep behaving as they did before this iteration.
 """
 
+from pieces_config import PAWN_TYPE  # iteration10
+
 
 def _is_straight_line(delta_row, delta_col):
     return (delta_row == 0) != (delta_col == 0)
@@ -19,23 +21,23 @@ def _is_diagonal_line(delta_row, delta_col):
     return delta_row != 0 and abs(delta_row) == abs(delta_col)
 
 
-def _king_shape(delta_row, delta_col, color=None, is_capture=False):
+def _king_shape(delta_row, delta_col, color=None, is_capture=False, **_context):
     return max(abs(delta_row), abs(delta_col)) == 1
 
 
-def _rook_shape(delta_row, delta_col, color=None, is_capture=False):
+def _rook_shape(delta_row, delta_col, color=None, is_capture=False, **_context):
     return _is_straight_line(delta_row, delta_col)
 
 
-def _bishop_shape(delta_row, delta_col, color=None, is_capture=False):
+def _bishop_shape(delta_row, delta_col, color=None, is_capture=False, **_context):
     return _is_diagonal_line(delta_row, delta_col)
 
 
-def _queen_shape(delta_row, delta_col, color=None, is_capture=False):
+def _queen_shape(delta_row, delta_col, color=None, is_capture=False, **_context):
     return _is_straight_line(delta_row, delta_col) or _is_diagonal_line(delta_row, delta_col)
 
 
-def _knight_shape(delta_row, delta_col, color=None, is_capture=False):
+def _knight_shape(delta_row, delta_col, color=None, is_capture=False, **_context):
     return sorted((abs(delta_row), abs(delta_col))) == [1, 2]
 
 
@@ -46,15 +48,48 @@ def _knight_shape(delta_row, delta_col, color=None, is_capture=False):
 PAWN_FORWARD_ROW_DELTA = {"w": -1, "b": 1}
 
 
-# iteration5
-def _pawn_shape(delta_row, delta_col, color=None, is_capture=False):
+# iteration10: the row each color's pawns start on / promote on, given
+# the board's height. Config-driven the same way PAWN_FORWARD_ROW_DELTA
+# is, rather than a number buried in _pawn_shape. Pawns start on their
+# own home edge (the fixture places them there directly, there's no
+# separate back rank the way a standard chess set has one) and promote
+# on the opposite edge.
+def pawn_start_row(color, board_height):
+    if color == "w":
+        return board_height - 1
+    if color == "b":
+        return 0
+    return None
+
+
+def pawn_promotion_row(color, board_height):
+    if color == "w":
+        return 0
+    if color == "b":
+        return board_height - 1
+    return None
+
+
+def _is_at_pawn_start_row(color, from_row, board_height):
+    if from_row is None or board_height is None:
+        return False
+    return from_row == pawn_start_row(color, board_height)
+
+
+# iteration5, iteration10
+def _pawn_shape(delta_row, delta_col, color=None, is_capture=False, from_row=None, board_height=None, **_context):
     forward = PAWN_FORWARD_ROW_DELTA.get(color)
-    if forward is None or delta_row != forward:
+    if forward is None:
         return False
     if delta_col == 0:
-        return not is_capture  # straight ahead only onto an empty cell
+        if is_capture:
+            return False  # can't capture moving straight ahead
+        if delta_row == forward:
+            return True
+        # iteration10: two cells forward, only from the pawn's start row
+        return delta_row == forward * 2 and _is_at_pawn_start_row(color, from_row, board_height)
     if abs(delta_col) == 1:
-        return is_capture  # diagonal only when actually capturing
+        return is_capture and delta_row == forward  # diagonal only when actually capturing
     return False
 
 
@@ -68,11 +103,11 @@ MOVEMENT_SHAPES = {
 }
 
 
-def is_legal_shape(piece_type, delta_row, delta_col, color=None, is_capture=False):
+def is_legal_shape(piece_type, delta_row, delta_col, color=None, is_capture=False, from_row=None, board_height=None):
     shape = MOVEMENT_SHAPES.get(piece_type)
     if shape is None:
         return True
-    return shape(delta_row, delta_col, color, is_capture)
+    return shape(delta_row, delta_col, color=color, is_capture=is_capture, from_row=from_row, board_height=board_height)
 
 
 # iteration4
@@ -105,9 +140,15 @@ def is_path_clear(board, from_row, from_col, delta_row, delta_col, empty_token):
 def is_legal_move(piece_type, board, from_row, from_col, to_row, to_col, empty_token, color=None):
     delta_row, delta_col = to_row - from_row, to_col - from_col
     is_capture = board.get(to_row, to_col) != empty_token  # iteration5
-    if not is_legal_shape(piece_type, delta_row, delta_col, color, is_capture):
+    board_height, _ = board.dimensions()  # iteration10: pawn start-row needs this
+    if not is_legal_shape(piece_type, delta_row, delta_col, color, is_capture, from_row, board_height):
         return False
     if piece_type in SLIDING_PIECE_TYPES:
+        return is_path_clear(board, from_row, from_col, delta_row, delta_col, empty_token)
+    if piece_type == PAWN_TYPE and abs(delta_row) == 2:
+        # iteration10: the pawn's 2-cell start move must also have a
+        # clear path -- reuses the same path-cell logic sliding pieces
+        # use, since it already handles a single square in between.
         return is_path_clear(board, from_row, from_col, delta_row, delta_col, empty_token)
     return True
 
