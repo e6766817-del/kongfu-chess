@@ -4,7 +4,7 @@ Pure text extraction only -- no legality/width validation happens here
 (see validator.py).
 """
 
-from stream_reader import read_lines, read_section
+from kfchess.io.stream_reader import read_lines, read_section
 
 BOARD_MARKER = "Board:"
 COMMANDS_MARKER = "Commands:"
