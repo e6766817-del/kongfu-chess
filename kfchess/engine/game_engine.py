@@ -49,7 +49,7 @@ class GameEngine:
         if not legality.is_legal:
             return MoveResult(False, reason=legality.reason)
 
-        arrival_time_ms = self._arbiter.schedule_move(from_position, to_position, piece.color, piece.piece_type)
+        arrival_time_ms = self._arbiter.schedule_move(from_position, to_position, piece.color, piece.kind)
         return MoveResult(True, arrival_time_ms=arrival_time_ms)
 
     def request_jump(self, position):

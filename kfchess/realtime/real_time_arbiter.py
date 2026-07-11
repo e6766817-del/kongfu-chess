@@ -76,7 +76,7 @@ class RealTimeArbiter:
                 continue
 
             destination_piece = self._board.get(move.to_position)
-            captured_type = destination_piece.piece_type if destination_piece is not None else None
+            captured_type = destination_piece.kind if destination_piece is not None else None
             self._board.move(move.from_position, move.to_position)
             self._end_airborne(move.to_position)
             if captured_type == KING_TYPE:

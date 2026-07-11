@@ -29,7 +29,7 @@ def test_move_scheduled_then_arrives():
 
     engine.advance_clock(1000)
     assert engine.board().get(Position(0, 0)) is None
-    assert engine.board().get(Position(0, 2)).piece_type == "R"
+    assert engine.board().get(Position(0, 2)).kind == "R"
 
 
 def test_illegal_move_returns_reason():
@@ -50,7 +50,7 @@ def test_king_capture_ends_game():
 
     engine.advance_clock(1000)
     assert engine.is_game_over() is True
-    assert engine.board().get(Position(0, 2)).piece_type == "R"
+    assert engine.board().get(Position(0, 2)).kind == "R"
 
 
 def test_jump_ambush_destroys_arriving_piece():
@@ -64,7 +64,7 @@ def test_jump_ambush_destroys_arriving_piece():
     assert move_result.accepted is True
 
     engine.advance_clock(1000)
-    assert engine.board().get(Position(0, 0)).piece_type == "N"  # knight intercepted and stayed
+    assert engine.board().get(Position(0, 0)).kind == "N"  # knight intercepted and stayed
     assert engine.board().get(Position(0, 1)) is None  # rook destroyed
 
 
@@ -78,5 +78,5 @@ def test_controller_click_selection_via_pixel():
     controller.handle_click_at_pixel(250, 50)  # requests move to (0, 2)
 
     engine.advance_clock(1000)
-    assert engine.board().get(Position(0, 2)).piece_type == "R"
+    assert engine.board().get(Position(0, 2)).kind == "R"
     assert game_state.selected_position is None

@@ -49,13 +49,13 @@ class RuleEngine:
         is_capture = destination_piece is not None
         board_height, _ = board.dimensions()
 
-        if not is_legal_shape(piece.piece_type, delta_row, delta_col, color, is_capture, from_position.row, board_height):
+        if not is_legal_shape(piece.kind, delta_row, delta_col, color, is_capture, from_position.row, board_height):
             return MoveLegality(False, REASON_WRONG_SHAPE)
 
-        if piece.piece_type in SLIDING_PIECE_TYPES:
+        if piece.kind in SLIDING_PIECE_TYPES:
             if not is_path_clear(board, from_position, delta_row, delta_col):
                 return MoveLegality(False, REASON_PATH_BLOCKED)
-        elif piece.piece_type == PAWN_TYPE and abs(delta_row) == 2:
+        elif piece.kind == PAWN_TYPE and abs(delta_row) == 2:
             if not is_path_clear(board, from_position, delta_row, delta_col):
                 return MoveLegality(False, REASON_PATH_BLOCKED)
 

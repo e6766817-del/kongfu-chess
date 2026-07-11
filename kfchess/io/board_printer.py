@@ -14,7 +14,7 @@ from kfchess.model.position import Position
 def _token(piece):
     if piece is None:
         return EMPTY_TOKEN
-    return piece.color + piece.piece_type
+    return piece.color + piece.kind
 
 
 def render(board):
