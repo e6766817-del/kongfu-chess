@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from kfchess.rules.piece_rules import is_legal_shape, is_path_clear
 
+REASON_OUTSIDE_BOARD = "outside_board"
 REASON_NO_PIECE = "no_piece_at_source"
 REASON_FRIENDLY_DESTINATION = "destination_occupied_by_own_color"
 REASON_WRONG_SHAPE = "illegal_shape"
@@ -22,6 +23,9 @@ class MoveLegality:
 
 class RuleEngine:
     def evaluate(self, board, from_position, to_position, color):
+        if not board.is_inside(from_position) or not board.is_inside(to_position):
+            return MoveLegality(False, REASON_OUTSIDE_BOARD)
+
         piece = board.get(from_position)
         if piece is None:
             return MoveLegality(False, REASON_NO_PIECE)
