@@ -1,11 +1,13 @@
-"""Movement-shape rules: whether a piece type's geometry allows moving
-from one cell to another. Shape only -- no blocking-piece or capture
-checks here, that's rule_engine.py's job.
+"""Per-piece rules: shape (does this piece's geometry allow the move)
+and path clearance (is anything in the way). All piece-type-specific
+logic lives here so rule_engine.py can stay generic orchestration.
 
 Piece type -> rule is a lookup (not an if/elif chain) so a new piece
 type can be registered without touching existing ones. A piece type
 with no registered rule is unrestricted.
 """
+
+from kfchess.model.piece import PAWN_TYPE
 
 
 def _is_straight_line(delta_row, delta_col):
@@ -102,3 +104,24 @@ SLIDING_PIECE_TYPES = {"R", "B", "Q"}
 
 def steps(delta_row, delta_col):
     return max(abs(delta_row), abs(delta_col))
+
+
+def _path_cells(from_position, delta_row, delta_col):
+    step_count = steps(delta_row, delta_col)
+    if step_count <= 1:
+        return []
+    step_row = (delta_row > 0) - (delta_row < 0)
+    step_col = (delta_col > 0) - (delta_col < 0)
+    return [from_position.translated(step_row * i, step_col * i) for i in range(1, step_count)]
+
+
+def _requires_clear_path(piece_type, delta_row):
+    if piece_type in SLIDING_PIECE_TYPES:
+        return True
+    return piece_type == PAWN_TYPE and abs(delta_row) == 2
+
+
+def is_path_clear(board, piece_type, from_position, delta_row, delta_col):
+    if not _requires_clear_path(piece_type, delta_row):
+        return True
+    return all(board.get(cell) is None for cell in _path_cells(from_position, delta_row, delta_col))

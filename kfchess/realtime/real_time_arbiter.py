@@ -14,7 +14,7 @@ only the home of the code changed.
 
 from kfchess.model.piece import KING_TYPE, PAWN_TYPE, QUEEN_TYPE, Piece
 from kfchess.realtime.motion import JUMP_DURATION_MS, AirborneJump, PendingMove
-from kfchess.rules.movement_rules import pawn_promotion_row, steps
+from kfchess.rules.piece_rules import pawn_promotion_row, steps
 
 MS_PER_CELL = 1000
 
