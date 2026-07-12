@@ -22,9 +22,13 @@ def test_move_scheduled_then_arrives():
 
     result = engine.request_move(Position(0, 0), Position(0, 2))
     assert result.accepted is True
-    assert result.arrival_time_ms == 1000
+    assert result.arrival_time_ms == 2000
 
     assert engine.board().get(Position(0, 0)) is not None  # not yet moved
+    assert engine.board().get(Position(0, 2)) is None
+
+    engine.advance_clock(1000)
+    assert engine.board().get(Position(0, 0)) is not None  # still in transit
     assert engine.board().get(Position(0, 2)) is None
 
     engine.advance_clock(1000)
@@ -48,7 +52,7 @@ def test_king_capture_ends_game():
     result = engine.request_move(Position(0, 0), Position(0, 2))
     assert result.accepted is True
 
-    engine.advance_clock(1000)
+    engine.advance_clock(2000)
     assert engine.is_game_over() is True
     assert engine.board().get(Position(0, 2)).kind == "R"
 
@@ -77,6 +81,6 @@ def test_controller_click_selection_via_pixel():
     controller.handle_click_at_pixel(50, 50)   # selects (0, 0)
     controller.handle_click_at_pixel(250, 50)  # requests move to (0, 2)
 
-    engine.advance_clock(1000)
+    engine.advance_clock(2000)
     assert engine.board().get(Position(0, 2)).kind == "R"
     assert game_state.selected_position is None

@@ -20,7 +20,7 @@ MS_PER_CELL = 1000
 
 
 def move_duration_ms(delta_row, delta_col):
-    return max(1, steps(delta_row, delta_col) - 1) * MS_PER_CELL
+    return steps(delta_row, delta_col) * MS_PER_CELL
 
 
 class RealTimeArbiter:
