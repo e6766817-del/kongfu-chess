@@ -42,6 +42,8 @@ class GameEngine:
         piece = self._board.get(from_position)
         if piece is None:
             return MoveResult(False, reason=REASON_NO_PIECE)
+        if self._arbiter.is_locked(from_position):
+            return MoveResult(False, reason=REASON_ALREADY_LOCKED)
         if self._arbiter.is_opposite_color_moving(piece.color):
             return MoveResult(False, reason=REASON_OPPONENT_MOVING)
 

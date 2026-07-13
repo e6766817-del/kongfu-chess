@@ -8,7 +8,7 @@ king capture ending the game, and jump/ambush) without duplicating
 every iteration file.
 """
 
-from kfchess.engine.game_engine import GameEngine
+from kfchess.engine.game_engine import REASON_ALREADY_LOCKED, GameEngine
 from kfchess.input.controller import Controller
 from kfchess.io.validator import build_board
 from kfchess.model.game_state import GameState
@@ -70,6 +70,23 @@ def test_jump_ambush_destroys_arriving_piece():
     engine.advance_clock(1000)
     assert engine.board().get(Position(0, 0)).kind == "N"  # knight intercepted and stayed
     assert engine.board().get(Position(0, 1)) is None  # rook destroyed
+
+
+def test_moving_piece_cannot_be_redirected():
+    board = build_board([["wR", ".", ".", "."]])
+    engine = GameEngine(board)
+
+    first = engine.request_move(Position(0, 0), Position(0, 3))  # 3-cell move -> arrives at 3000ms
+    assert first.accepted is True
+
+    engine.advance_clock(1000)  # still in transit
+    redirect = engine.request_move(Position(0, 0), Position(0, 1))
+    assert redirect.accepted is False
+    assert redirect.reason == REASON_ALREADY_LOCKED
+
+    engine.advance_clock(2000)  # original move arrives, unaffected by the rejected redirect
+    assert engine.board().get(Position(0, 0)) is None
+    assert engine.board().get(Position(0, 3)).kind == "R"
 
 
 def test_controller_click_selection_via_pixel():
