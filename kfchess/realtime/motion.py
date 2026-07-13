@@ -25,3 +25,14 @@ class AirborneJump:
     position: Position
     color: str
     end_time_ms: int
+
+
+@dataclass(frozen=True)
+class MidPathCapture:
+    """A same-cell, opposite-color near-collision detected mid-path (not
+    at either move's final destination). `move` is destroyed in transit
+    -- removed from the board -- once the clock reaches resolve_time_ms.
+    """
+
+    move: PendingMove
+    resolve_time_ms: int
