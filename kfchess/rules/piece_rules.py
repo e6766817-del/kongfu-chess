@@ -45,9 +45,9 @@ PAWN_FORWARD_ROW_DELTA = {"w": -1, "b": 1}
 
 def pawn_start_row(color, board_height):
     if color == "w":
-        return board_height - 1
+        return board_height - 2
     if color == "b":
-        return 0
+        return 1
     return None
 
 
