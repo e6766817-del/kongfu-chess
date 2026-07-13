@@ -12,9 +12,11 @@ jump/ambush mechanic and settlement ordering) is preserved exactly --
 only the home of the code changed.
 """
 
+from dataclasses import replace
+
 from kfchess.model.piece import KING_TYPE, PAWN_TYPE, QUEEN_TYPE, Piece
-from kfchess.realtime.motion import JUMP_DURATION_MS, AirborneJump, PendingMove
-from kfchess.rules.piece_rules import pawn_promotion_row, steps
+from kfchess.realtime.motion import JUMP_DURATION_MS, AirborneJump, MidPathCapture, PendingMove
+from kfchess.rules.piece_rules import line_path_cells, pawn_promotion_row, steps
 
 MS_PER_CELL = 1000
 
@@ -30,13 +32,16 @@ class RealTimeArbiter:
         self._clock_ms = 0
         self._pending_moves = []
         self._airborne = []
+        self._mid_path_captures = []
         self._game_over = False
 
     def schedule_move(self, from_position, to_position, color, piece_type):
         delta_row, delta_col = from_position.delta_to(to_position)
         arrival_time_ms = self._clock_ms + move_duration_ms(delta_row, delta_col)
-        self._pending_moves.append(PendingMove(from_position, to_position, arrival_time_ms, color, piece_type))
-        return arrival_time_ms
+        move = PendingMove(from_position, to_position, arrival_time_ms, color, piece_type)
+        move = self._resolve_path_collisions(move)
+        self._pending_moves.append(move)
+        return move.arrival_time_ms
 
     def schedule_jump(self, position, color):
         self._airborne.append(AirborneJump(position, color, self._clock_ms + JUMP_DURATION_MS))
@@ -46,6 +51,7 @@ class RealTimeArbiter:
         self.settle()
 
     def settle(self):
+        self._settle_due_mid_path_captures()
         self._settle_due_moves()
         self._settle_due_jumps()
 
@@ -86,6 +92,83 @@ class RealTimeArbiter:
 
     def _settle_due_jumps(self):
         self._airborne = [jump for jump in self._airborne if jump.end_time_ms > self._clock_ms]
+
+    def _settle_due_mid_path_captures(self):
+        still_pending = []
+        for capture in self._mid_path_captures:
+            if capture.resolve_time_ms > self._clock_ms:
+                still_pending.append(capture)
+                continue
+            if capture.move in self._pending_moves:
+                self._pending_moves.remove(capture.move)
+                self._board.set(capture.move.from_position, None)
+                if capture.move.piece_type == KING_TYPE:
+                    self._game_over = True
+        self._mid_path_captures = still_pending
+
+    def _interior_path_times(self, move):
+        """(cell, entry_time_ms) for each interior cell of move's path, in
+        travel order. A piece occupies a cell for the MS_PER_CELL window
+        starting at its entry time, matching its constant travel speed.
+        """
+        cells = line_path_cells(move.from_position, move.to_position)
+        if not cells:
+            return []
+        step_count = len(cells) + 1  # + the final destination step
+        start_time_ms = move.arrival_time_ms - step_count * MS_PER_CELL
+        return [(cell, start_time_ms + (index + 1) * MS_PER_CELL) for index, cell in enumerate(cells)]
+
+    def _earliest_shared_cell(self, move_a, move_b):
+        """The earliest cell + both moves' entry times where move_a and
+        move_b would pass through the same cell within one step (MS_PER_CELL)
+        of each other -- close enough in time to be a real or "almost"
+        collision -- or None if their paths never come that close.
+        """
+        matches = []
+        for cell_a, start_a in self._interior_path_times(move_a):
+            for cell_b, start_b in self._interior_path_times(move_b):
+                if cell_a != cell_b:
+                    continue
+                if abs(start_a - start_b) <= MS_PER_CELL:
+                    matches.append((min(start_a, start_b), cell_a, start_a, start_b))
+        if not matches:
+            return None
+        matches.sort(key=lambda match: match[0])
+        _, cell, start_a, start_b = matches[0]
+        return cell, start_a, start_b
+
+    def _resolve_path_collisions(self, new_move):
+        for other in list(self._pending_moves):
+            shared = self._earliest_shared_cell(new_move, other)
+            if shared is None:
+                continue
+            cell, new_entry_time, other_entry_time = shared
+            if new_move.color == other.color:
+                if new_entry_time >= other_entry_time:
+                    new_move = self._truncate_before(new_move, cell, new_entry_time)
+                else:
+                    self._replace_pending(other, self._truncate_before(other, cell, other_entry_time))
+            else:
+                if new_entry_time == other_entry_time:
+                    self._mid_path_captures.append(MidPathCapture(other, other_entry_time))
+                    self._mid_path_captures.append(MidPathCapture(new_move, new_entry_time))
+                elif new_entry_time > other_entry_time:
+                    self._mid_path_captures.append(MidPathCapture(other, other_entry_time))
+                else:
+                    self._mid_path_captures.append(MidPathCapture(new_move, new_entry_time))
+        return new_move
+
+    def _truncate_before(self, move, collision_cell, collision_time_ms):
+        cells = line_path_cells(move.from_position, move.to_position)
+        collision_index = cells.index(collision_cell)
+        stop_cell = cells[collision_index - 1] if collision_index > 0 else move.from_position
+        stop_time_ms = collision_time_ms - MS_PER_CELL
+        if stop_time_ms <= self._clock_ms:
+            stop_cell, stop_time_ms = move.from_position, self._clock_ms
+        return replace(move, to_position=stop_cell, arrival_time_ms=stop_time_ms)
+
+    def _replace_pending(self, old_move, new_move):
+        self._pending_moves = [new_move if move is old_move else move for move in self._pending_moves]
 
     def _maybe_promote(self, move):
         if move.piece_type != PAWN_TYPE:

@@ -115,6 +115,19 @@ def _path_cells(from_position, delta_row, delta_col):
     return [from_position.translated(step_row * i, step_col * i) for i in range(1, step_count)]
 
 
+def line_path_cells(from_position, to_position):
+    """Interior cells strictly between from_position and to_position, in
+    travel order, for moves that travel a single straight or diagonal
+    line one cell per step. Returns None for moves with no such line
+    (e.g. a knight's jump) -- those have no meaningful intermediate
+    cells to collide on.
+    """
+    delta_row, delta_col = from_position.delta_to(to_position)
+    if not (_is_straight_line(delta_row, delta_col) or _is_diagonal_line(delta_row, delta_col)):
+        return None
+    return _path_cells(from_position, delta_row, delta_col)
+
+
 def _requires_clear_path(piece_type, delta_row):
     if piece_type in SLIDING_PIECE_TYPES:
         return True
