@@ -20,6 +20,35 @@ from kfchess.rules.piece_rules import line_path_cells, pawn_promotion_row, steps
 
 MS_PER_CELL = 1000
 
+# A cell's lock state: IDLE (free to move/jump from), MOVING (source cell
+# of a pending move, until arrival), AIRBORNE (mid-jump, until landing).
+#
+# Transition graph -- every state change goes through exactly one of
+# these trigger points, no code elsewhere mutates lock state directly:
+#
+#   IDLE -> MOVING    schedule_move()          (piece starts moving)
+#   IDLE -> AIRBORNE  schedule_jump()          (piece starts a jump)
+#   MOVING -> IDLE     _settle_due_moves() /    (move arrives, or is
+#                       _settle_due_mid_path_    captured mid-path)
+#                       captures()
+#   AIRBORNE -> IDLE   _settle_due_jumps() /    (jump duration elapses,
+#                       _end_airborne()          or a move lands on the
+#                                                 airborne piece's cell)
+#
+# GameEngine.request_move/request_jump already check is_locked() before
+# calling schedule_move/schedule_jump, so a cell should never be asked to
+# enter MOVING or AIRBORNE while it isn't IDLE -- _enter_lock() asserts
+# that instead of trusting callers, so a caller-side bug (a missing
+# is_locked() check) fails loudly here rather than silently corrupting
+# _pending_moves/_airborne into an inconsistent, doubly-locked state.
+IDLE = "idle"
+MOVING = "moving"
+AIRBORNE = "airborne"
+
+
+class InvalidLockTransition(Exception):
+    """Raised when something tries to lock a cell that isn't IDLE."""
+
 
 def move_duration_ms(delta_row, delta_col):
     return steps(delta_row, delta_col) * MS_PER_CELL
@@ -36,6 +65,7 @@ class RealTimeArbiter:
         self._game_over = False
 
     def schedule_move(self, from_position, to_position, color, piece_type):
+        self._enter_lock(from_position, MOVING)
         delta_row, delta_col = from_position.delta_to(to_position)
         arrival_time_ms = self._clock_ms + move_duration_ms(delta_row, delta_col)
         move = PendingMove(from_position, to_position, arrival_time_ms, color, piece_type)
@@ -44,6 +74,7 @@ class RealTimeArbiter:
         return move.arrival_time_ms
 
     def schedule_jump(self, position, color):
+        self._enter_lock(position, AIRBORNE)
         self._airborne.append(AirborneJump(position, color, self._clock_ms + JUMP_DURATION_MS))
 
     def advance_clock(self, milliseconds):
@@ -58,8 +89,22 @@ class RealTimeArbiter:
     def is_game_over(self):
         return self._game_over
 
+    def lock_state(self, position):
+        if self._is_moving(position):
+            return MOVING
+        if self._is_airborne(position):
+            return AIRBORNE
+        return IDLE
+
     def is_locked(self, position):
-        return self._is_moving(position) or self._is_airborne(position)
+        return self.lock_state(position) != IDLE
+
+    def _enter_lock(self, position, new_state):
+        current = self.lock_state(position)
+        if current != IDLE:
+            raise InvalidLockTransition(
+                f"cannot lock {position} as {new_state}: already {current}"
+            )
 
     def is_opposite_color_moving(self, color):
         return any(move.color != color for move in self._pending_moves)
