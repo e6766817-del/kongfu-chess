@@ -3,7 +3,9 @@ so every on-board piece of the same (kind, color, skin) shares one set of
 already-decoded Img frames instead of re-reading files per instance.
 """
 
-from kfchess.gui.config import DEFAULT_SKIN
+from kfchess.gui import assets
+from kfchess.gui.config import DEFAULT_SKIN, SPRITE_SIZE_PX
+from kfchess.gui.img import Img
 
 
 class SpriteSet:
@@ -21,9 +23,14 @@ class SpriteSet:
 
     def frames(self, state):
         """Return (list[Img], config_dict) for `state`, loading + caching on first use."""
-        # TODO: on cache miss, use kfchess.gui.assets.sprite_paths/state_config
-        # to build Img().read(path) for each frame and store in self._states.
-        raise NotImplementedError
+        if state not in self._states:
+            paths = assets.sprite_paths(self._kind, self._color, state, self._skin)
+            frames = [
+                Img().read(path, size=SPRITE_SIZE_PX, keep_aspect=True) for path in paths
+            ]
+            config = assets.state_config(self._kind, self._color, state, self._skin)
+            self._states[state] = (frames, config)
+        return self._states[state]
 
 
 class SpriteSetCache:
@@ -36,5 +43,7 @@ class SpriteSetCache:
         self._sets = {}
 
     def get(self, kind, color):
-        # TODO: return self._sets.setdefault((kind, color), SpriteSet(kind, color, self._skin))
-        raise NotImplementedError
+        key = (kind, color)
+        if key not in self._sets:
+            self._sets[key] = SpriteSet(kind, color, self._skin)
+        return self._sets[key]

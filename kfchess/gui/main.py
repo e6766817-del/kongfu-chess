@@ -2,8 +2,10 @@
 GameState/GameEngine/Controller (all from kfchess), and launches the
 GameLoop.
 
-Run with: python -m kfchess.gui.main
+Run with: python -m kfchess.gui.main [--skin pieces1|pieces2]
 """
+
+import argparse
 
 from kfchess.engine.game_engine import GameEngine
 from kfchess.input.controller import Controller
@@ -11,7 +13,7 @@ from kfchess.io.validator import build_board
 from kfchess.model.game_state import GameState
 
 from kfchess.gui.board_view import BoardView
-from kfchess.gui.config import DEFAULT_SKIN
+from kfchess.gui.config import AVAILABLE_SKINS, DEFAULT_SKIN
 from kfchess.gui.game_loop import GameLoop
 from kfchess.gui.piece_sprites import SpriteSetCache
 from kfchess.gui.renderer import Renderer
@@ -39,17 +41,24 @@ def build_game():
     return game_engine, game_state, controller
 
 
-def build_renderer(skin=DEFAULT_SKIN):
+def build_game_loop(game_engine, game_state, controller, skin=DEFAULT_SKIN):
     board_view = BoardView(skin)
-    sprite_set_cache = SpriteSetCache(skin)
     scoreboard = ScoreBoard()
-    return Renderer(board_view, sprite_set_cache, scoreboard)
+    renderer = Renderer(board_view, scoreboard)
+    sprite_set_cache = SpriteSetCache(skin)
+    return GameLoop(game_engine, game_state, controller, renderer, sprite_set_cache)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Kung-fu chess GUI.")
+    parser.add_argument("--skin", choices=AVAILABLE_SKINS, default=DEFAULT_SKIN)
+    return parser.parse_args()
 
 
 def main():
+    args = parse_args()
     game_engine, game_state, controller = build_game()
-    renderer = build_renderer()
-    game_loop = GameLoop(game_engine, game_state, controller, renderer)
+    game_loop = build_game_loop(game_engine, game_state, controller, skin=args.skin)
     game_loop.run()
 
 

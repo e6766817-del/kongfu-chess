@@ -4,20 +4,26 @@ frame (an Img), each frame, for GameLoop to display.
 
 
 class Renderer:
-    def __init__(self, board_view, sprite_set_cache, scoreboard):
+    def __init__(self, board_view, scoreboard):
         self._board_view = board_view
-        self._sprite_set_cache = sprite_set_cache
         self._scoreboard = scoreboard
 
-    def render(self, board, animations_by_piece_id):
-        """Return one composed Img for this frame.
+    def render(self, board, animations_by_piece_id, dt_ms):
+        """Return one composed Img for this frame."""
+        self._scoreboard.tick(dt_ms)
+        self._scoreboard.note_captures(board)
 
-        TODO:
-          1. canvas = fresh Img copy of the board background (board_view.draw)
-          2. for each piece on `board`, look up its PieceAnimationState from
-             animations_by_piece_id, get current_frame(), and
-             frame.draw_on(canvas, *board_view.cell_to_pixel(piece.cell))
-          3. self._scoreboard.draw(canvas)
-          4. return canvas
-        """
-        raise NotImplementedError
+        canvas = self._board_view.new_canvas()
+
+        for position in board.all_positions():
+            piece = board.get(position)
+            if piece is None:
+                continue
+            animation = animations_by_piece_id.get(piece.id)
+            if animation is None:
+                continue
+            x, y = self._board_view.cell_to_pixel(position)
+            animation.current_frame().draw_on(canvas, x, y)
+
+        self._scoreboard.draw(canvas)
+        return canvas
