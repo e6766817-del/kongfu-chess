@@ -8,7 +8,7 @@ Layout on disk (see assets/pieces1/, assets/pieces2/):
 <COLOR> is W or B (kfchess.model.piece.COLORS, upper-cased).
 """
 
-from frontend.config import ASSETS_ROOT, DEFAULT_SKIN
+from kfchess.gui.config import ASSETS_ROOT, DEFAULT_SKIN
 
 
 def board_image_path(skin=DEFAULT_SKIN):

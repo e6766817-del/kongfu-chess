@@ -1,6 +1,6 @@
 """Board background + Position<->pixel conversion, drawn through Img."""
 
-from frontend.config import CELL_SIZE_PX, DEFAULT_SKIN
+from kfchess.gui.config import CELL_SIZE_PX, DEFAULT_SKIN
 
 
 class BoardView:
@@ -16,7 +16,7 @@ class BoardView:
 
     def draw(self, canvas):
         """Blit the board background onto `canvas` (an Img)."""
-        # TODO: load board.png via frontend.assets.board_image_path on first
+        # TODO: load board.png via kfchess.gui.assets.board_image_path on first
         # use (Img().read(...)), then canvas is drawn on top of/starts as
         # a copy of it.
         raise NotImplementedError

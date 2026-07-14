@@ -3,7 +3,7 @@ so every on-board piece of the same (kind, color, skin) shares one set of
 already-decoded Img frames instead of re-reading files per instance.
 """
 
-from frontend.config import DEFAULT_SKIN
+from kfchess.gui.config import DEFAULT_SKIN
 
 
 class SpriteSet:
@@ -21,7 +21,7 @@ class SpriteSet:
 
     def frames(self, state):
         """Return (list[Img], config_dict) for `state`, loading + caching on first use."""
-        # TODO: on cache miss, use frontend.assets.sprite_paths/state_config
+        # TODO: on cache miss, use kfchess.gui.assets.sprite_paths/state_config
         # to build Img().read(path) for each frame and store in self._states.
         raise NotImplementedError
 

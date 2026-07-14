@@ -2,7 +2,7 @@
 
 The backend (kfchess.engine.GameEngine) exposes no in-flight/pixel
 position -- Board only changes atomically on arrival. So this state
-machine is driven entirely from the frontend side:
+machine is driven entirely from this GUI driver's side:
 
   - idle:        loops forever until start_move()/start_jump() is called.
   - move:        starts when GameEngine.request_move() is accepted; runs
@@ -19,10 +19,10 @@ Frame timing within a state comes from that state's config.json
 ("graphics": {"frames_per_sec", "is_loop"}); state-to-state transitions
 come from "physics": {"next_state_when_finished"}. There is no
 "captured" sprite state -- captured pieces are removed outright by
-whatever holds the frontend's piece list, not animated out.
+whatever holds the on-screen piece list, not animated out.
 """
 
-from frontend.config import PIECE_STATES
+from kfchess.gui.config import PIECE_STATES
 
 IDLE = "idle"
 MOVE = "move"
