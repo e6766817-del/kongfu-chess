@@ -18,10 +18,22 @@ machine is driven entirely from this GUI driver's side:
                   arrival_time_ms window, so the sprite lands the same
                   moment the engine actually unlocks the cell -- see
                   start_move().
-  - jump/short_rest/long_rest: each is_loop=False in its config.json,
-                  so advance() alone finishes the state's own frame
+  - jump:        is_loop=False, so advance() alone finishes its frame
                   sequence and transitions to next_state_when_finished
-                  without any external signal.
+                  ("short_rest") without any external signal -- purely
+                  cosmetic air-time.
+  - short_rest/long_rest: is_loop=False, but these states are the real
+                  enforced cooldown (RealTimeArbiter.RESTING), which
+                  doesn't necessarily finish in exactly this state's own
+                  frame_count/frames_per_sec window -- per-piece-kind
+                  sprite packs don't all have the same frame count (e.g.
+                  the rook's rest states have 4 frames, not 5). So
+                  advance() plays through the frames once and then holds
+                  on the last frame instead of auto-transitioning; only
+                  GameLoop calling on_rest_settled(), once
+                  GameEngine.is_locked() reports the piece's own cell
+                  free again, actually advances past it -- same
+                  polling pattern as MOVE's on_settled().
 
 Frame timing within a state comes from that state's config.json
 ("graphics": {"frames_per_sec", "is_loop"}); state-to-state transitions
@@ -78,9 +90,20 @@ class PieceAnimationState:
     def on_settled(self):
         """Called by GameLoop once a MOVE piece's origin cell is no
         longer locked (the move arrived, was captured mid-path, etc).
-        No-op outside MOVE, since the other non-loop states finish on
-        their own via advance()."""
+        No-op outside MOVE, since JUMP finishes on its own via advance()
+        and SHORT_REST/LONG_REST wait for on_rest_settled() instead."""
         if self.state_name != MOVE:
+            return
+        _frames, config = self._sprite_set.frames(self.state_name)
+        self._enter(config["physics"]["next_state_when_finished"])
+
+    def on_rest_settled(self):
+        """Called by GameLoop once a SHORT_REST/LONG_REST piece's own
+        cell is no longer locked by GameEngine -- i.e. the real cooldown
+        RealTimeArbiter enforces, not just this state's own frame count,
+        which can finish earlier or later depending on the piece kind's
+        sprite pack. No-op outside SHORT_REST/LONG_REST."""
+        if self.state_name not in (SHORT_REST, LONG_REST):
             return
         _frames, config = self._sprite_set.frames(self.state_name)
         self._enter(config["physics"]["next_state_when_finished"])
@@ -100,6 +123,9 @@ class PieceAnimationState:
             return
 
         if self.elapsed_ms >= total_frames * ms_per_frame:
+            if self.state_name in (SHORT_REST, LONG_REST):
+                self.frame_index = total_frames - 1  # hold here for on_rest_settled()
+                return
             next_state = config["physics"]["next_state_when_finished"]
             self._enter(next_state)
             return

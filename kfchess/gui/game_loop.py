@@ -16,13 +16,20 @@ each frame, since a move can end early (mid-path capture) or its
 target cell can get truncated by a path collision -- see
 RealTimeArbiter._resolve_path_collisions -- cases GameEngine exposes no
 advance notice of.
+
+SHORT_REST/LONG_REST settlement (on_rest_settled(), see
+_settle_resting_pieces()) is polled the same way, on the piece's own
+(destination) cell -- these are the real enforced cooldown
+(RealTimeArbiter.RESTING), and each piece kind's sprite pack doesn't
+necessarily have the same frame count, so the animation can't just
+time itself out locally the way JUMP's purely-cosmetic air-time does.
 """
 
 import time
 
 import cv2
 
-from kfchess.gui.animation import PieceAnimationState
+from kfchess.gui.animation import LONG_REST, SHORT_REST, PieceAnimationState
 from kfchess.input.board_mapper import pixel_to_cell
 
 WINDOW_NAME = "Kung Fu Chess"
@@ -64,6 +71,7 @@ class GameLoop:
 
                 self._sync_animations(board)
                 self._settle_in_flight_moves()
+                self._settle_resting_pieces(board)
                 for animation in self._animations_by_piece_id.values():
                     animation.advance(dt_ms)
 
@@ -127,6 +135,23 @@ class GameLoop:
             animation = self._animations_by_piece_id.get(piece_id)
             if animation is not None:
                 animation.on_settled()
+
+    def _settle_resting_pieces(self, board):
+        """A SHORT_REST/LONG_REST animation holds on its last frame once
+        its own frames finish (see PieceAnimationState.advance()) -- it
+        only actually advances to idle once GameEngine reports the
+        piece's own cell unlocked, i.e. RealTimeArbiter's real cooldown
+        elapsed, not just this state's own (per-kind-inconsistent) frame
+        count."""
+        for position in board.all_positions():
+            piece = board.get(position)
+            if piece is None:
+                continue
+            animation = self._animations_by_piece_id.get(piece.id)
+            if animation is None or animation.state_name not in (SHORT_REST, LONG_REST):
+                continue
+            if not self._game_engine.is_locked(position):
+                animation.on_rest_settled()
 
     def _on_mouse(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:

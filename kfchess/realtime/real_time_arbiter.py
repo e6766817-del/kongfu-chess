@@ -15,7 +15,15 @@ only the home of the code changed.
 from dataclasses import replace
 
 from kfchess.model.piece import KING_TYPE, PAWN_TYPE, QUEEN_TYPE, Piece
-from kfchess.realtime.motion import JUMP_DURATION_MS, AirborneJump, MidPathCapture, PendingMove
+from kfchess.realtime.motion import (
+    JUMP_DURATION_MS,
+    LONG_REST_MS_PER_CELL,
+    SHORT_REST_DURATION_MS,
+    AirborneJump,
+    MidPathCapture,
+    PendingMove,
+    RestingPiece,
+)
 from kfchess.rules.piece_rules import line_path_cells, pawn_promotion_row, steps
 
 # Every piece's move config.json (see assets/pieces1|2/*/states/move/
@@ -32,19 +40,27 @@ CELL_SIZE_METERS = 1.0
 MS_PER_CELL = round(CELL_SIZE_METERS / PIECE_SPEED_M_PER_SEC * 1000)
 
 # A cell's lock state: IDLE (free to move/jump from), MOVING (source cell
-# of a pending move, until arrival), AIRBORNE (mid-jump, until landing).
+# of a pending move, until arrival), AIRBORNE (mid-jump, until landing),
+# RESTING (just arrived or just landed, cooling down before it can act
+# again).
 #
 # Transition graph -- every state change goes through exactly one of
 # these trigger points, no code elsewhere mutates lock state directly:
 #
-#   IDLE -> MOVING    schedule_move()          (piece starts moving)
-#   IDLE -> AIRBORNE  schedule_jump()          (piece starts a jump)
-#   MOVING -> IDLE     _settle_due_moves() /    (move arrives, or is
-#                       _settle_due_mid_path_    captured mid-path)
-#                       captures()
-#   AIRBORNE -> IDLE   _settle_due_jumps() /    (jump duration elapses,
-#                       _end_airborne()          or a move lands on the
-#                                                 airborne piece's cell)
+#   IDLE -> MOVING      schedule_move()          (piece starts moving)
+#   IDLE -> AIRBORNE    schedule_jump()          (piece starts a jump)
+#   MOVING -> RESTING    _settle_due_moves()      (move arrives -> long
+#                                                   rest, scaled by
+#                                                   distance traveled;
+#                                                   captured mid-path
+#                                                   skips straight to
+#                                                   gone)
+#   AIRBORNE -> RESTING  _settle_due_jumps() /    (jump lands, or a move
+#                       _settle_due_moves()        arrives while the
+#                        ambush branch              jumper is still
+#                                                    airborne -> short
+#                                                    rest either way)
+#   RESTING -> IDLE      _settle_due_rests()       (rest duration elapses)
 #
 # GameEngine.request_move/request_jump already check is_locked() before
 # calling schedule_move/schedule_jump, so a cell should never be asked to
@@ -52,9 +68,12 @@ MS_PER_CELL = round(CELL_SIZE_METERS / PIECE_SPEED_M_PER_SEC * 1000)
 # that instead of trusting callers, so a caller-side bug (a missing
 # is_locked() check) fails loudly here rather than silently corrupting
 # _pending_moves/_airborne into an inconsistent, doubly-locked state.
+# RESTING is entered/exited purely by internal settlement, never by a
+# caller-initiated request, so it doesn't go through _enter_lock().
 IDLE = "idle"
 MOVING = "moving"
 AIRBORNE = "airborne"
+RESTING = "resting"
 
 
 class InvalidLockTransition(Exception):
@@ -65,6 +84,10 @@ def move_duration_ms(delta_row, delta_col):
     return steps(delta_row, delta_col) * MS_PER_CELL
 
 
+def long_rest_duration_ms(delta_row, delta_col):
+    return steps(delta_row, delta_col) * LONG_REST_MS_PER_CELL
+
+
 class RealTimeArbiter:
     def __init__(self, board, rule_engine):
         self._board = board
@@ -72,6 +95,7 @@ class RealTimeArbiter:
         self._clock_ms = 0
         self._pending_moves = []
         self._airborne = []
+        self._resting = []
         self._mid_path_captures = []
         self._game_over = False
 
@@ -96,6 +120,7 @@ class RealTimeArbiter:
         self._settle_due_mid_path_captures()
         self._settle_due_moves()
         self._settle_due_jumps()
+        self._settle_due_rests()
 
     def is_game_over(self):
         return self._game_over
@@ -105,6 +130,8 @@ class RealTimeArbiter:
             return MOVING
         if self._is_airborne(position):
             return AIRBORNE
+        if self._is_resting(position):
+            return RESTING
         return IDLE
 
     def is_locked(self, position):
@@ -130,6 +157,7 @@ class RealTimeArbiter:
             if airborne_jump is not None and airborne_jump.end_time_ms >= move.arrival_time_ms:
                 self._board.set(move.from_position, None)
                 self._end_airborne(move.to_position)
+                self._enter_rest(move.to_position, airborne_jump.color, SHORT_REST_DURATION_MS)
                 if move.piece_type == KING_TYPE:
                     self._game_over = True
                 continue
@@ -141,10 +169,25 @@ class RealTimeArbiter:
             if captured_type == KING_TYPE:
                 self._game_over = True
             self._maybe_promote(move)
+            delta_row, delta_col = move.from_position.delta_to(move.to_position)
+            self._enter_rest(move.to_position, move.color, long_rest_duration_ms(delta_row, delta_col))
         self._pending_moves = still_pending
 
     def _settle_due_jumps(self):
-        self._airborne = [jump for jump in self._airborne if jump.end_time_ms > self._clock_ms]
+        still_airborne = []
+        for jump in self._airborne:
+            if jump.end_time_ms > self._clock_ms:
+                still_airborne.append(jump)
+                continue
+            self._enter_rest(jump.position, jump.color, SHORT_REST_DURATION_MS)
+        self._airborne = still_airborne
+
+    def _settle_due_rests(self):
+        self._resting = [rest for rest in self._resting if rest.end_time_ms > self._clock_ms]
+
+    def _enter_rest(self, position, color, duration_ms):
+        self._resting = [rest for rest in self._resting if rest.position != position]
+        self._resting.append(RestingPiece(position, color, self._clock_ms + duration_ms))
 
     def _settle_due_mid_path_captures(self):
         still_pending = []
@@ -247,3 +290,12 @@ class RealTimeArbiter:
 
     def _end_airborne(self, position):
         self._airborne = [jump for jump in self._airborne if jump.position != position]
+
+    def _is_resting(self, position):
+        return self._find_resting(position) is not None
+
+    def _find_resting(self, position):
+        for rest in self._resting:
+            if rest.position == position:
+                return rest
+        return None
