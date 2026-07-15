@@ -117,9 +117,6 @@ class RealTimeArbiter:
                 f"cannot lock {position} as {new_state}: already {current}"
             )
 
-    def is_opposite_color_moving(self, color):
-        return any(move.color != color for move in self._pending_moves)
-
     def _settle_due_moves(self):
         still_pending = []
         for move in sorted(self._pending_moves, key=lambda m: m.arrival_time_ms):

@@ -12,7 +12,6 @@ from kfchess.engine.move_result import MoveResult
 from kfchess.realtime.real_time_arbiter import RealTimeArbiter
 from kfchess.rules.rule_engine import REASON_NO_PIECE, RuleEngine
 
-REASON_OPPONENT_MOVING = "opponent_piece_moving"
 REASON_ALREADY_LOCKED = "piece_already_locked"
 
 
@@ -44,8 +43,6 @@ class GameEngine:
             return MoveResult(False, reason=REASON_NO_PIECE)
         if self._arbiter.is_locked(from_position):
             return MoveResult(False, reason=REASON_ALREADY_LOCKED)
-        if self._arbiter.is_opposite_color_moving(piece.color):
-            return MoveResult(False, reason=REASON_OPPONENT_MOVING)
 
         legality = self._rule_engine.evaluate(self._board, from_position, to_position, piece.color)
         if not legality.is_legal:

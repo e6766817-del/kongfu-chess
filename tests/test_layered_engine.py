@@ -13,8 +13,8 @@ from kfchess.input.controller import Controller
 from kfchess.io.validator import build_board
 from kfchess.model.game_state import GameState
 from kfchess.model.position import Position
-from kfchess.realtime.real_time_arbiter import MS_PER_CELL, RealTimeArbiter
-from kfchess.rules.rule_engine import REASON_WRONG_SHAPE, RuleEngine
+from kfchess.realtime.real_time_arbiter import MS_PER_CELL
+from kfchess.rules.rule_engine import REASON_WRONG_SHAPE
 
 
 def test_move_scheduled_then_arrives():
@@ -127,35 +127,31 @@ def test_opposite_color_mid_path_collision_captures_earlier_piece():
     # bQ travels a4->h4 (row 3) and wR travels e1->e8 (column 4); their
     # paths cross at e4. The rook reaches e4 later than the queen, so the
     # rook captures the queen mid-flight and continues to its own square.
-    #
-    # GameEngine.request_move currently refuses to schedule a move for
-    # either color while the other color already has one in flight
-    # (REASON_OPPONENT_MOVING), so two different-colored pieces can never
-    # actually be simultaneously in transit through the public API today.
-    # This test drives RealTimeArbiter directly to prove the mid-path
-    # capture mechanism itself is correct; see the caller for the
-    # unresolved policy question this raises.
+    # Both colors are simultaneously in transit, driven through the public
+    # GameEngine API, matching real kung-fu-chess play.
     grid = [_empty_row() for _ in range(8)]
     grid[0][4] = "wR"
     grid[3][0] = "bQ"
     board = build_board(grid)
-    arbiter = RealTimeArbiter(board, RuleEngine())
+    engine = GameEngine(board)
 
-    queen_arrival = arbiter.schedule_move(Position(3, 0), Position(3, 7), "b", "Q")
-    assert queen_arrival == 7 * MS_PER_CELL
+    queen_result = engine.request_move(Position(3, 0), Position(3, 7))
+    assert queen_result.accepted is True
+    assert queen_result.arrival_time_ms == 7 * MS_PER_CELL
 
-    arbiter.advance_clock(2 * MS_PER_CELL)
+    engine.advance_clock(2 * MS_PER_CELL)
 
-    rook_arrival = arbiter.schedule_move(Position(0, 4), Position(7, 4), "w", "R")
-    assert rook_arrival == 9 * MS_PER_CELL  # rook's own move is unaffected
+    rook_result = engine.request_move(Position(0, 4), Position(7, 4))
+    assert rook_result.accepted is True
+    assert rook_result.arrival_time_ms == 9 * MS_PER_CELL  # rook's own move is unaffected
 
-    arbiter.advance_clock(2 * MS_PER_CELL)  # clock at 4 * MS_PER_CELL -- mid-path capture resolves
-    assert board.get(Position(3, 0)) is None  # queen destroyed in transit
-    assert board.get(Position(3, 7)) is None  # queen never arrives
+    engine.advance_clock(2 * MS_PER_CELL)  # clock at 4 * MS_PER_CELL -- mid-path capture resolves
+    assert engine.board().get(Position(3, 0)) is None  # queen destroyed in transit
+    assert engine.board().get(Position(3, 7)) is None  # queen never arrives
 
-    arbiter.advance_clock(5 * MS_PER_CELL)  # clock at 9 * MS_PER_CELL -- rook arrives at its own destination
-    assert board.get(Position(0, 4)) is None
-    assert board.get(Position(7, 4)).kind == "R"
+    engine.advance_clock(5 * MS_PER_CELL)  # clock at 9 * MS_PER_CELL -- rook arrives at its own destination
+    assert engine.board().get(Position(0, 4)) is None
+    assert engine.board().get(Position(7, 4)).kind == "R"
 
 
 def test_controller_click_selection_via_pixel():
