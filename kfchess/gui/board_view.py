@@ -3,7 +3,7 @@
 import numpy as np
 
 from kfchess.gui import assets
-from kfchess.gui.config import BOARD_SIZE_PX, CANVAS_SIZE_PX, CELL_SIZE_PX, DEFAULT_SKIN
+from kfchess.gui.config import BOARD_SIZE_PX, BOARD_X_OFFSET_PX, CANVAS_SIZE_PX, CELL_SIZE_PX, DEFAULT_SKIN
 from kfchess.gui.img import Img
 
 HUD_BACKGROUND_COLOR = (32, 32, 32, 255)  # BGRA, dark gray
@@ -20,13 +20,15 @@ class BoardView:
 
     def cell_to_pixel(self, position):
         """Top-left pixel of `position`'s cell (inverse of
-        kfchess.input.board_mapper.pixel_to_cell)."""
-        return position.col * CELL_SIZE_PX, position.row * CELL_SIZE_PX
+        kfchess.input.board_mapper.pixel_to_cell), offset past the left
+        SidePanel so the board sits centered between the two panels."""
+        return position.col * CELL_SIZE_PX + BOARD_X_OFFSET_PX, position.row * CELL_SIZE_PX
 
     def new_canvas(self):
-        """A fresh Img sized for the board plus a HUD strip below it
-        (see kfchess.gui.config.HUD_HEIGHT_PX), safe to draw pieces and
-        scoreboard text onto without mutating the cached board image."""
+        """A fresh Img sized for the two side panels plus the board and
+        the HUD strip below it (see kfchess.gui.config.SIDE_PANEL_WIDTH_PX
+        / HUD_HEIGHT_PX), safe to draw pieces and HUD/panel text onto
+        without mutating the cached board image."""
         self._ensure_loaded()
         canvas_w, canvas_h = CANVAS_SIZE_PX
         board_pixels = self._board_img.img
@@ -34,7 +36,7 @@ class BoardView:
         canvas_pixels = np.empty((canvas_h, canvas_w, board_pixels.shape[2]), dtype=board_pixels.dtype)
         canvas_pixels[:, :] = HUD_BACKGROUND_COLOR[: board_pixels.shape[2]]
         board_h, board_w = board_pixels.shape[:2]
-        canvas_pixels[:board_h, :board_w] = board_pixels
+        canvas_pixels[:board_h, BOARD_X_OFFSET_PX:BOARD_X_OFFSET_PX + board_w] = board_pixels
 
         canvas = Img()
         canvas.img = canvas_pixels

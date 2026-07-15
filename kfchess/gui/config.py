@@ -21,10 +21,21 @@ BOARD_SIZE_CELLS = 8
 BOARD_SIZE_PX = (BOARD_SIZE_CELLS * CELL_SIZE_PX, BOARD_SIZE_CELLS * CELL_SIZE_PX)
 SPRITE_SIZE_PX = (CELL_SIZE_PX, CELL_SIZE_PX)
 
-# The scoreboard and HUD message get their own strip below the board
-# rather than drawing over the last rank's pieces.
-HUD_HEIGHT_PX = 90
-CANVAS_SIZE_PX = (BOARD_SIZE_PX[0], BOARD_SIZE_PX[1] + HUD_HEIGHT_PX)
+# The HUD message strip below the board, for the transient move-rejection
+# banner and the game clock -- everything color-specific (score, captures,
+# move history) lives in the side panels instead, see SidePanel.
+HUD_HEIGHT_PX = 70
+
+# A SidePanel flanks each side of the board -- white's on the left,
+# black's on the right -- each spanning the full canvas height, so a
+# player's own score/captures/move-history all live together on their
+# own side rather than sharing a strip under the board.
+SIDE_PANEL_WIDTH_PX = 240
+BOARD_X_OFFSET_PX = SIDE_PANEL_WIDTH_PX
+LEFT_PANEL_X = 0
+RIGHT_PANEL_X = BOARD_X_OFFSET_PX + BOARD_SIZE_PX[0]
+
+CANVAS_SIZE_PX = (SIDE_PANEL_WIDTH_PX * 2 + BOARD_SIZE_PX[0], BOARD_SIZE_PX[1] + HUD_HEIGHT_PX)
 
 __all__ = [
     "CELL_SIZE_PX",
@@ -37,5 +48,9 @@ __all__ = [
     "BOARD_SIZE_PX",
     "SPRITE_SIZE_PX",
     "HUD_HEIGHT_PX",
+    "SIDE_PANEL_WIDTH_PX",
+    "BOARD_X_OFFSET_PX",
+    "LEFT_PANEL_X",
+    "RIGHT_PANEL_X",
     "CANVAS_SIZE_PX",
 ]

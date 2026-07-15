@@ -25,6 +25,11 @@ class GameEngine:
         self._arbiter.settle()
         return self._board
 
+    def add_observer(self, observer):
+        """Register an ArbiterObserver (see kfchess.realtime.observers)
+        to be notified of move/capture instants as they settle."""
+        self._arbiter.add_observer(observer)
+
     def is_game_over(self):
         self._arbiter.settle()
         return self._arbiter.is_game_over()

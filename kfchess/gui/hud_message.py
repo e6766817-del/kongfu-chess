@@ -1,9 +1,9 @@
 """Transient HUD banner explaining why a move/jump request was rejected,
-drawn via Img.put_text below the ScoreBoard row (see kfchess.gui.config.
+drawn via Img.put_text below the Clock (see kfchess.gui.config.
 HUD_HEIGHT_PX / kfchess.gui.board_view.BoardView.new_canvas).
 """
 
-from kfchess.gui.config import BOARD_SIZE_PX
+from kfchess.gui.config import BOARD_SIZE_PX, BOARD_X_OFFSET_PX
 
 DISPLAY_DURATION_MS = 2500
 
@@ -39,5 +39,5 @@ class HudMessage:
         if self._text is None:
             return
         _board_width, board_height = BOARD_SIZE_PX
-        baseline_y = board_height + 72
-        canvas.put_text(self._text, 10, baseline_y, 0.55, color=(80, 80, 255, 255))
+        baseline_y = board_height + 55
+        canvas.put_text(self._text, BOARD_X_OFFSET_PX + 10, baseline_y, 0.55, color=(80, 80, 255, 255))

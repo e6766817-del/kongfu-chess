@@ -98,6 +98,20 @@ class RealTimeArbiter:
         self._resting = []
         self._mid_path_captures = []
         self._game_over = False
+        self._observers = []
+
+    def add_observer(self, observer):
+        """Register an ArbiterObserver to be notified of move/capture
+        instants as they settle (see kfchess.realtime.observers)."""
+        self._observers.append(observer)
+
+    def _notify_move_settled(self, color, piece_type, from_position, to_position):
+        for observer in self._observers:
+            observer.on_move_settled(color, piece_type, from_position, to_position)
+
+    def _notify_piece_captured(self, color, piece_type):
+        for observer in self._observers:
+            observer.on_piece_captured(color, piece_type)
 
     def schedule_move(self, from_position, to_position, color, piece_type):
         self._enter_lock(from_position, MOVING)
@@ -158,6 +172,7 @@ class RealTimeArbiter:
                 self._board.set(move.from_position, None)
                 self._end_airborne(move.to_position)
                 self._enter_rest(move.to_position, airborne_jump.color, SHORT_REST_DURATION_MS)
+                self._notify_piece_captured(move.color, move.piece_type)
                 if move.piece_type == KING_TYPE:
                     self._game_over = True
                 continue
@@ -166,11 +181,14 @@ class RealTimeArbiter:
             captured_type = destination_piece.kind if destination_piece is not None else None
             self._board.move(move.from_position, move.to_position)
             self._end_airborne(move.to_position)
+            if destination_piece is not None:
+                self._notify_piece_captured(destination_piece.color, captured_type)
             if captured_type == KING_TYPE:
                 self._game_over = True
             self._maybe_promote(move)
             delta_row, delta_col = move.from_position.delta_to(move.to_position)
             self._enter_rest(move.to_position, move.color, long_rest_duration_ms(delta_row, delta_col))
+            self._notify_move_settled(move.color, move.piece_type, move.from_position, move.to_position)
         self._pending_moves = still_pending
 
     def _settle_due_jumps(self):
@@ -198,6 +216,7 @@ class RealTimeArbiter:
             if capture.move in self._pending_moves:
                 self._pending_moves.remove(capture.move)
                 self._board.set(capture.move.from_position, None)
+                self._notify_piece_captured(capture.move.color, capture.move.piece_type)
                 if capture.move.piece_type == KING_TYPE:
                     self._game_over = True
         self._mid_path_captures = still_pending

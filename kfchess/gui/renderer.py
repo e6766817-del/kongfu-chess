@@ -1,5 +1,5 @@
-"""Composes BoardView + per-piece animation frames + ScoreBoard into one
-frame (an Img), each frame, for GameLoop to display.
+"""Composes BoardView + per-piece animation frames + Clock + the two
+SidePanels into one frame (an Img), each frame, for GameLoop to display.
 """
 
 import cv2
@@ -18,15 +18,15 @@ GAME_OVER_THICKNESS = 4
 
 
 class Renderer:
-    def __init__(self, board_view, scoreboard, hud_message):
+    def __init__(self, board_view, clock, side_panels, hud_message):
         self._board_view = board_view
-        self._scoreboard = scoreboard
+        self._clock = clock
+        self._side_panels = side_panels
         self._hud_message = hud_message
 
     def render(self, board, animations_by_piece_id, dt_ms, selected_position=None, game_over=False):
         """Return one composed Img for this frame."""
-        self._scoreboard.tick(dt_ms)
-        self._scoreboard.note_captures(board)
+        self._clock.tick(dt_ms)
         self._hud_message.tick(dt_ms)
 
         canvas = self._board_view.new_canvas()
@@ -52,7 +52,9 @@ class Renderer:
             x, y = pixel if pixel is not None else self._board_view.cell_to_pixel(position)
             animation.current_frame().draw_on(canvas, int(x), int(y))
 
-        self._scoreboard.draw(canvas)
+        self._clock.draw(canvas)
+        for side_panel in self._side_panels:
+            side_panel.draw(canvas)
         self._hud_message.draw(canvas)
 
         if game_over:

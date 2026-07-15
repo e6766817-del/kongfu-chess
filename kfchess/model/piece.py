@@ -18,6 +18,18 @@ KING_TYPE = "K"
 PAWN_TYPE = "P"
 QUEEN_TYPE = "Q"
 
+# Standard chess material values -- the king has none since it's never
+# actually captured for score (a king capture ends the game instead, see
+# RealTimeArbiter._game_over).
+PIECE_VALUES = {
+    KING_TYPE: 0,
+    QUEEN_TYPE: 9,
+    "R": 5,
+    "B": 3,
+    "N": 3,
+    PAWN_TYPE: 1,
+}
+
 IDLE_STATE = "idle"
 MOVING_STATE = "moving"
 CAPTURED_STATE = "captured"
