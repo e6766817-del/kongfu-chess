@@ -43,6 +43,10 @@ class Controller:
                 self._game_state.select(position)
             return
 
+        if position == selected_position:
+            self._game_state.clear_selection()
+            return
+
         selected_piece = board.get(selected_position)
 
         if clicked_piece is not None and clicked_piece.color == selected_piece.color:

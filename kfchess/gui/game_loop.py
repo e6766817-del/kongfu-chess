@@ -27,6 +27,7 @@ from kfchess.input.board_mapper import pixel_to_cell
 
 WINDOW_NAME = "Kung Fu Chess"
 QUIT_KEYS = (ord("q"), 27)  # 'q' or Esc
+GAME_OVER_DISPLAY_SECONDS = 3.0
 
 
 class GameLoop:
@@ -66,16 +67,33 @@ class GameLoop:
                 for animation in self._animations_by_piece_id.values():
                     animation.advance(dt_ms)
 
-                frame = self._renderer.render(board, self._animations_by_piece_id, dt_ms)
+                game_over = self._game_engine.is_game_over()
+                frame = self._renderer.render(
+                    board, self._animations_by_piece_id, dt_ms, self._game_state.selected_position,
+                    game_over=game_over,
+                )
                 cv2.imshow(WINDOW_NAME, frame.img)
 
                 key = cv2.waitKey(1) & 0xFF
-                if key in QUIT_KEYS or self._game_engine.is_game_over():
+                if key in QUIT_KEYS:
                     break
                 if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
                     break
+                if game_over:
+                    self._hold_game_over_screen()
+                    break
         finally:
             cv2.destroyAllWindows()
+
+    def _hold_game_over_screen(self):
+        """Keep the last-rendered GAME OVER frame on screen (pumping cv2's
+        event loop so the window stays responsive) for
+        GAME_OVER_DISPLAY_SECONDS, then let run() close the window."""
+        end_time = time.perf_counter() + GAME_OVER_DISPLAY_SECONDS
+        while time.perf_counter() < end_time:
+            cv2.waitKey(50)
+            if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
+                break
 
     def _sync_animations(self, board):
         """Create a PieceAnimationState (idle) for any newly-seen piece,
