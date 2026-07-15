@@ -4,14 +4,16 @@ frame (an Img), each frame, for GameLoop to display.
 
 
 class Renderer:
-    def __init__(self, board_view, scoreboard):
+    def __init__(self, board_view, scoreboard, hud_message):
         self._board_view = board_view
         self._scoreboard = scoreboard
+        self._hud_message = hud_message
 
     def render(self, board, animations_by_piece_id, dt_ms):
         """Return one composed Img for this frame."""
         self._scoreboard.tick(dt_ms)
         self._scoreboard.note_captures(board)
+        self._hud_message.tick(dt_ms)
 
         canvas = self._board_view.new_canvas()
 
@@ -27,4 +29,5 @@ class Renderer:
             animation.current_frame().draw_on(canvas, int(x), int(y))
 
         self._scoreboard.draw(canvas)
+        self._hud_message.draw(canvas)
         return canvas

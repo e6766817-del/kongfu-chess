@@ -30,13 +30,14 @@ QUIT_KEYS = (ord("q"), 27)  # 'q' or Esc
 
 
 class GameLoop:
-    def __init__(self, game_engine, game_state, controller, renderer, board_view, sprite_set_cache):
+    def __init__(self, game_engine, game_state, controller, renderer, board_view, sprite_set_cache, hud_message):
         self._game_engine = game_engine
         self._game_state = game_state
         self._controller = controller
         self._renderer = renderer
         self._board_view = board_view
         self._sprite_set_cache = sprite_set_cache
+        self._hud_message = hud_message
         self._animations_by_piece_id = {}
         # piece_id -> origin Position, while its MOVE animation waits for arrival
         self._in_flight_moves = {}
@@ -120,7 +121,10 @@ class GameLoop:
         self._controller.handle_click_at_pixel(x, y)
 
         result = self._controller.last_move_result
-        if prior_selection is None or result is None or not result.accepted:
+        if prior_selection is None or result is None:
+            return
+        if not result.accepted:
+            self._hud_message.show(result.reason)
             return
         piece = self._game_engine.board().get(prior_selection)
         animation = self._animations_by_piece_id.get(piece.id) if piece else None

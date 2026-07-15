@@ -21,9 +21,9 @@ BOARD_SIZE_CELLS = 8
 BOARD_SIZE_PX = (BOARD_SIZE_CELLS * CELL_SIZE_PX, BOARD_SIZE_CELLS * CELL_SIZE_PX)
 SPRITE_SIZE_PX = (CELL_SIZE_PX, CELL_SIZE_PX)
 
-# The scoreboard gets its own strip below the board rather than drawing
-# over the last rank's pieces.
-HUD_HEIGHT_PX = 60
+# The scoreboard and HUD message get their own strip below the board
+# rather than drawing over the last rank's pieces.
+HUD_HEIGHT_PX = 90
 CANVAS_SIZE_PX = (BOARD_SIZE_PX[0], BOARD_SIZE_PX[1] + HUD_HEIGHT_PX)
 
 __all__ = [

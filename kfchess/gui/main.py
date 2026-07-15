@@ -15,6 +15,7 @@ from kfchess.model.game_state import GameState
 from kfchess.gui.board_view import BoardView
 from kfchess.gui.config import AVAILABLE_SKINS, DEFAULT_SKIN
 from kfchess.gui.game_loop import GameLoop
+from kfchess.gui.hud_message import HudMessage
 from kfchess.gui.piece_sprites import SpriteSetCache
 from kfchess.gui.renderer import Renderer
 from kfchess.gui.scoreboard import ScoreBoard
@@ -44,9 +45,10 @@ def build_game():
 def build_game_loop(game_engine, game_state, controller, skin=DEFAULT_SKIN):
     board_view = BoardView(skin)
     scoreboard = ScoreBoard()
-    renderer = Renderer(board_view, scoreboard)
+    hud_message = HudMessage()
+    renderer = Renderer(board_view, scoreboard, hud_message)
     sprite_set_cache = SpriteSetCache(skin)
-    return GameLoop(game_engine, game_state, controller, renderer, board_view, sprite_set_cache)
+    return GameLoop(game_engine, game_state, controller, renderer, board_view, sprite_set_cache, hud_message)
 
 
 def parse_args():
