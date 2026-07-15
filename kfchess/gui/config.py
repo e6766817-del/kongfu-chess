@@ -12,7 +12,7 @@ import pathlib
 from kfchess.input.board_mapper import CELL_SIZE_PX
 
 ASSETS_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent / "assets"
-AVAILABLE_SKINS = ("pieces1", "pieces2")
+AVAILABLE_SKINS = ("pieces1", "pieces2", "pieces3")
 DEFAULT_SKIN = "pieces1"
 PIECE_STATES = ("idle", "move", "jump", "short_rest", "long_rest")
 FRAMES_PER_STATE = 5
