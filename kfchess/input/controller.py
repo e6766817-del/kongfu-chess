@@ -15,11 +15,19 @@ class Controller:
         self._game_engine = game_engine
         self._game_state = game_state
         self._board_mapper = board_mapper
+        # MoveResult (accepted + arrival_time_ms) from the most recent
+        # handle_click_at_cell/pixel call, or None if that click wasn't a
+        # move attempt. Exists so drivers that need exact arrival timing
+        # (the GUI driver, to sync a sliding sprite so it lands exactly
+        # when GameEngine actually unlocks the cell) don't have to
+        # re-derive it -- texttests ignores this and is unaffected.
+        self.last_move_result = None
 
     def handle_click_at_pixel(self, x, y):
         self.handle_click_at_cell(self._board_mapper.pixel_to_cell(x, y))
 
     def handle_click_at_cell(self, position):
+        self.last_move_result = None
         if self._game_engine.is_game_over():
             return
 
@@ -43,6 +51,7 @@ class Controller:
             return
 
         result = self._game_engine.request_move(selected_position, position)
+        self.last_move_result = result
         if result.accepted:
             self._game_state.clear_selection()
 

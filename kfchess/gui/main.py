@@ -46,7 +46,7 @@ def build_game_loop(game_engine, game_state, controller, skin=DEFAULT_SKIN):
     scoreboard = ScoreBoard()
     renderer = Renderer(board_view, scoreboard)
     sprite_set_cache = SpriteSetCache(skin)
-    return GameLoop(game_engine, game_state, controller, renderer, sprite_set_cache)
+    return GameLoop(game_engine, game_state, controller, renderer, board_view, sprite_set_cache)
 
 
 def parse_args():

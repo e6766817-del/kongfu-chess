@@ -13,7 +13,7 @@ from kfchess.input.controller import Controller
 from kfchess.io.validator import build_board
 from kfchess.model.game_state import GameState
 from kfchess.model.position import Position
-from kfchess.realtime.real_time_arbiter import RealTimeArbiter
+from kfchess.realtime.real_time_arbiter import MS_PER_CELL, RealTimeArbiter
 from kfchess.rules.rule_engine import REASON_WRONG_SHAPE, RuleEngine
 
 
@@ -23,16 +23,16 @@ def test_move_scheduled_then_arrives():
 
     result = engine.request_move(Position(0, 0), Position(0, 2))
     assert result.accepted is True
-    assert result.arrival_time_ms == 2000
+    assert result.arrival_time_ms == 2 * MS_PER_CELL
 
     assert engine.board().get(Position(0, 0)) is not None  # not yet moved
     assert engine.board().get(Position(0, 2)) is None
 
-    engine.advance_clock(1000)
+    engine.advance_clock(MS_PER_CELL)
     assert engine.board().get(Position(0, 0)) is not None  # still in transit
     assert engine.board().get(Position(0, 2)) is None
 
-    engine.advance_clock(1000)
+    engine.advance_clock(MS_PER_CELL)
     assert engine.board().get(Position(0, 0)) is None
     assert engine.board().get(Position(0, 2)).kind == "R"
 
@@ -53,7 +53,7 @@ def test_king_capture_ends_game():
     result = engine.request_move(Position(0, 0), Position(0, 2))
     assert result.accepted is True
 
-    engine.advance_clock(2000)
+    engine.advance_clock(2 * MS_PER_CELL)
     assert engine.is_game_over() is True
     assert engine.board().get(Position(0, 2)).kind == "R"
 
@@ -65,10 +65,10 @@ def test_jump_ambush_destroys_arriving_piece():
     jump_result = engine.request_jump(Position(0, 0))
     assert jump_result.accepted is True
 
-    move_result = engine.request_move(Position(0, 1), Position(0, 0))  # 1-cell move -> arrives at 1000ms
+    move_result = engine.request_move(Position(0, 1), Position(0, 0))  # 1-cell move -> arrives at MS_PER_CELL
     assert move_result.accepted is True
 
-    engine.advance_clock(1000)
+    engine.advance_clock(MS_PER_CELL)
     assert engine.board().get(Position(0, 0)).kind == "N"  # knight intercepted and stayed
     assert engine.board().get(Position(0, 1)) is None  # rook destroyed
 
@@ -77,15 +77,15 @@ def test_moving_piece_cannot_be_redirected():
     board = build_board([["wR", ".", ".", "."]])
     engine = GameEngine(board)
 
-    first = engine.request_move(Position(0, 0), Position(0, 3))  # 3-cell move -> arrives at 3000ms
+    first = engine.request_move(Position(0, 0), Position(0, 3))  # 3-cell move -> arrives at 3 * MS_PER_CELL
     assert first.accepted is True
 
-    engine.advance_clock(1000)  # still in transit
+    engine.advance_clock(MS_PER_CELL)  # still in transit
     redirect = engine.request_move(Position(0, 0), Position(0, 1))
     assert redirect.accepted is False
     assert redirect.reason == REASON_ALREADY_LOCKED
 
-    engine.advance_clock(2000)  # original move arrives, unaffected by the rejected redirect
+    engine.advance_clock(2 * MS_PER_CELL)  # original move arrives, unaffected by the rejected redirect
     assert engine.board().get(Position(0, 0)) is None
     assert engine.board().get(Position(0, 3)).kind == "R"
 
@@ -106,19 +106,19 @@ def test_same_color_piece_stops_before_near_collision():
     queen_result = engine.request_move(Position(3, 0), Position(3, 7))
     assert queen_result.accepted is True
 
-    engine.advance_clock(2000)  # queen is now partway through her own path
+    engine.advance_clock(2 * MS_PER_CELL)  # queen is now partway through her own path
 
     rook_result = engine.request_move(Position(0, 4), Position(7, 4))
     assert rook_result.accepted is True
-    assert rook_result.arrival_time_ms == 4000  # truncated: stops at e3, not e8
+    assert rook_result.arrival_time_ms == 4 * MS_PER_CELL  # truncated: stops at e3, not e8
 
-    engine.advance_clock(2000)  # clock at 4000ms -- rook's truncated move settles
+    engine.advance_clock(2 * MS_PER_CELL)  # clock at 4 * MS_PER_CELL -- rook's truncated move settles
     assert engine.board().get(Position(0, 4)) is None
     assert engine.board().get(Position(2, 4)).kind == "R"  # stopped one cell short (e3)
     assert engine.board().get(Position(3, 4)) is None  # never reached e4
     assert engine.board().get(Position(7, 4)) is None  # never reached its original destination
 
-    engine.advance_clock(3000)  # clock at 7000ms -- queen's own move is unaffected
+    engine.advance_clock(3 * MS_PER_CELL)  # clock at 7 * MS_PER_CELL -- queen's own move is unaffected
     assert engine.board().get(Position(3, 0)) is None
     assert engine.board().get(Position(3, 7)).kind == "Q"
 
@@ -142,18 +142,18 @@ def test_opposite_color_mid_path_collision_captures_earlier_piece():
     arbiter = RealTimeArbiter(board, RuleEngine())
 
     queen_arrival = arbiter.schedule_move(Position(3, 0), Position(3, 7), "b", "Q")
-    assert queen_arrival == 7000
+    assert queen_arrival == 7 * MS_PER_CELL
 
-    arbiter.advance_clock(2000)
+    arbiter.advance_clock(2 * MS_PER_CELL)
 
     rook_arrival = arbiter.schedule_move(Position(0, 4), Position(7, 4), "w", "R")
-    assert rook_arrival == 9000  # rook's own move is unaffected
+    assert rook_arrival == 9 * MS_PER_CELL  # rook's own move is unaffected
 
-    arbiter.advance_clock(2000)  # clock at 4000ms -- mid-path capture resolves
+    arbiter.advance_clock(2 * MS_PER_CELL)  # clock at 4 * MS_PER_CELL -- mid-path capture resolves
     assert board.get(Position(3, 0)) is None  # queen destroyed in transit
     assert board.get(Position(3, 7)) is None  # queen never arrives
 
-    arbiter.advance_clock(5000)  # clock at 9000ms -- rook arrives at its own destination
+    arbiter.advance_clock(5 * MS_PER_CELL)  # clock at 9 * MS_PER_CELL -- rook arrives at its own destination
     assert board.get(Position(0, 4)) is None
     assert board.get(Position(7, 4)).kind == "R"
 
@@ -167,6 +167,6 @@ def test_controller_click_selection_via_pixel():
     controller.handle_click_at_pixel(50, 50)   # selects (0, 0)
     controller.handle_click_at_pixel(250, 50)  # requests move to (0, 2)
 
-    engine.advance_clock(2000)
+    engine.advance_clock(2 * MS_PER_CELL)
     assert engine.board().get(Position(0, 2)).kind == "R"
     assert game_state.selected_position is None

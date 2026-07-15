@@ -22,8 +22,9 @@ class Renderer:
             animation = animations_by_piece_id.get(piece.id)
             if animation is None:
                 continue
-            x, y = self._board_view.cell_to_pixel(position)
-            animation.current_frame().draw_on(canvas, x, y)
+            pixel = animation.current_pixel()
+            x, y = pixel if pixel is not None else self._board_view.cell_to_pixel(position)
+            animation.current_frame().draw_on(canvas, int(x), int(y))
 
         self._scoreboard.draw(canvas)
         return canvas

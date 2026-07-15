@@ -6,7 +6,7 @@ share a cell (or aren't a straight line, e.g. a knight) are unaffected.
 
 from kfchess.io.validator import build_board
 from kfchess.model.position import Position
-from kfchess.realtime.real_time_arbiter import RealTimeArbiter
+from kfchess.realtime.real_time_arbiter import MS_PER_CELL, RealTimeArbiter
 from kfchess.rules.piece_rules import line_path_cells
 from kfchess.rules.rule_engine import RuleEngine
 
@@ -38,8 +38,8 @@ def test_paths_that_never_share_a_cell_do_not_collide():
     rook_arrival = arbiter.schedule_move(Position(0, 0), Position(0, 3), "w", "R")
     bishop_arrival = arbiter.schedule_move(Position(7, 7), Position(4, 4), "w", "B")
 
-    assert rook_arrival == 3000
-    assert bishop_arrival == 3000  # neither move gets truncated
+    assert rook_arrival == 3 * MS_PER_CELL
+    assert bishop_arrival == 3 * MS_PER_CELL  # neither move gets truncated
 
 
 def test_same_color_later_arrival_stops_one_cell_short():
@@ -48,11 +48,11 @@ def test_same_color_later_arrival_stops_one_cell_short():
     grid[3][0] = "wQ"
     arbiter, _ = _arbiter(grid)
 
-    arbiter.schedule_move(Position(3, 0), Position(3, 7), "w", "Q")  # queen reaches e4 at 4000ms
-    arbiter.advance_clock(2000)
-    rook_arrival = arbiter.schedule_move(Position(0, 4), Position(7, 4), "w", "R")  # would reach e4 at 5000ms
+    arbiter.schedule_move(Position(3, 0), Position(3, 7), "w", "Q")  # queen reaches e4 at 4 * MS_PER_CELL
+    arbiter.advance_clock(2 * MS_PER_CELL)
+    rook_arrival = arbiter.schedule_move(Position(0, 4), Position(7, 4), "w", "R")  # would reach e4 at 5 * MS_PER_CELL
 
-    assert rook_arrival == 4000  # truncated: stops at e3 instead of e8
+    assert rook_arrival == 4 * MS_PER_CELL  # truncated: stops at e3 instead of e8
 
 
 def test_opposite_color_earlier_arrival_is_captured_mid_path():
@@ -61,12 +61,12 @@ def test_opposite_color_earlier_arrival_is_captured_mid_path():
     grid[3][0] = "bQ"
     arbiter, board = _arbiter(grid)
 
-    arbiter.schedule_move(Position(3, 0), Position(3, 7), "b", "Q")  # queen reaches e4 at 4000ms
-    arbiter.advance_clock(2000)
-    rook_arrival = arbiter.schedule_move(Position(0, 4), Position(7, 4), "w", "R")  # reaches e4 at 5000ms
+    arbiter.schedule_move(Position(3, 0), Position(3, 7), "b", "Q")  # queen reaches e4 at 4 * MS_PER_CELL
+    arbiter.advance_clock(2 * MS_PER_CELL)
+    rook_arrival = arbiter.schedule_move(Position(0, 4), Position(7, 4), "w", "R")  # reaches e4 at 5 * MS_PER_CELL
 
-    assert rook_arrival == 9000  # winner's own move is untouched
+    assert rook_arrival == 9 * MS_PER_CELL  # winner's own move is untouched
 
-    arbiter.advance_clock(2000)  # clock at 4000ms -- capture resolves
+    arbiter.advance_clock(2 * MS_PER_CELL)  # clock at 4 * MS_PER_CELL -- capture resolves
     assert board.get(Position(3, 0)) is None  # queen destroyed in transit, never arrives
     assert board.get(Position(3, 7)) is None

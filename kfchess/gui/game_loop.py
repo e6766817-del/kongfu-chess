@@ -1,15 +1,21 @@
 """Owns the cv2 window, mouse input, and the frame-by-frame tick that
 drives GameEngine.advance_clock() and Renderer.render().
 
-Neither Controller nor GameEngine.request_move()/request_jump() expose
-their MoveResult to this driver (Controller swallows it, only using
-.accepted internally to clear selection) -- so animation state changes
-are detected reactively, by diffing GameState.selected_position and
-GameEngine.is_locked() immediately before/after each click, rather than
-predicted from a returned arrival_time_ms. See kfchess.gui.animation
-for how MOVE settlement (on_settled()) is likewise detected by polling
-is_locked() on the piece's origin cell each frame, instead of being
-timed against a predicted arrival.
+GameEngine.request_move() returns arrival_time_ms, and Controller now
+surfaces that MoveResult via .last_move_result (see kfchess.input.
+controller) -- this driver uses it to compute exactly how long the
+slide from origin to destination should take (arrival_time_ms minus
+the engine clock at accept time), so the sprite lands on the
+destination cell the same moment GameEngine actually unlocks it. See
+kfchess.gui.animation.PieceAnimationState.start_move()/current_pixel().
+
+MOVE settlement (on_settled(), which advances the sprite state past
+MOVE once the slide's real-world duration is done) is still detected
+reactively by polling GameEngine.is_locked() on the piece's origin cell
+each frame, since a move can end early (mid-path capture) or its
+target cell can get truncated by a path collision -- see
+RealTimeArbiter._resolve_path_collisions -- cases GameEngine exposes no
+advance notice of.
 """
 
 import time
@@ -24,15 +30,20 @@ QUIT_KEYS = (ord("q"), 27)  # 'q' or Esc
 
 
 class GameLoop:
-    def __init__(self, game_engine, game_state, controller, renderer, sprite_set_cache):
+    def __init__(self, game_engine, game_state, controller, renderer, board_view, sprite_set_cache):
         self._game_engine = game_engine
         self._game_state = game_state
         self._controller = controller
         self._renderer = renderer
+        self._board_view = board_view
         self._sprite_set_cache = sprite_set_cache
         self._animations_by_piece_id = {}
         # piece_id -> origin Position, while its MOVE animation waits for arrival
         self._in_flight_moves = {}
+        # Mirrors the total milliseconds fed to GameEngine.advance_clock()
+        # so far -- the same time base request_move()'s arrival_time_ms is
+        # measured against, letting us compute a slide's real duration.
+        self._engine_clock_ms = 0
 
     def run(self):
         cv2.namedWindow(WINDOW_NAME)
@@ -46,6 +57,7 @@ class GameLoop:
                 last_tick = now
 
                 self._game_engine.advance_clock(dt_ms)
+                self._engine_clock_ms += dt_ms
                 board = self._game_engine.board()
 
                 self._sync_animations(board)
@@ -107,13 +119,16 @@ class GameLoop:
         prior_selection = self._game_state.selected_position
         self._controller.handle_click_at_pixel(x, y)
 
-        move_was_accepted = prior_selection is not None and self._game_state.selected_position is None
-        if not move_was_accepted:
+        result = self._controller.last_move_result
+        if prior_selection is None or result is None or not result.accepted:
             return
         piece = self._game_engine.board().get(prior_selection)
         animation = self._animations_by_piece_id.get(piece.id) if piece else None
         if animation is not None:
-            animation.start_move()
+            origin_px = self._board_view.cell_to_pixel(prior_selection)
+            destination_px = self._board_view.cell_to_pixel(pixel_to_cell(x, y))
+            duration_ms = result.arrival_time_ms - self._engine_clock_ms
+            animation.start_move(origin_px, destination_px, duration_ms)
             self._in_flight_moves[piece.id] = prior_selection
 
     def _handle_jump_click(self, x, y):

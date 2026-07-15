@@ -18,7 +18,18 @@ from kfchess.model.piece import KING_TYPE, PAWN_TYPE, QUEEN_TYPE, Piece
 from kfchess.realtime.motion import JUMP_DURATION_MS, AirborneJump, MidPathCapture, PendingMove
 from kfchess.rules.piece_rules import line_path_cells, pawn_promotion_row, steps
 
-MS_PER_CELL = 1000
+# Every piece's move config.json (see assets/pieces1|2/*/states/move/
+# config.json) specifies physics.speed_m_per_sec: 1.5, uniformly across
+# every piece kind, color and skin. kfchess stays free of any GUI/asset
+# dependency (no cv2, no reading assets/ at runtime), so that value is
+# mirrored here as a plain constant rather than read from disk -- if the
+# asset packs ever change it, update PIECE_SPEED_M_PER_SEC to match.
+# CELL_SIZE_METERS is this simulation's own modeling choice (a board
+# cell represents 1 meter of travel); together they replace the old
+# flat "1 second per cell" guess with the assets' real intended speed.
+PIECE_SPEED_M_PER_SEC = 1.5
+CELL_SIZE_METERS = 1.0
+MS_PER_CELL = round(CELL_SIZE_METERS / PIECE_SPEED_M_PER_SEC * 1000)
 
 # A cell's lock state: IDLE (free to move/jump from), MOVING (source cell
 # of a pending move, until arrival), AIRBORNE (mid-jump, until landing).
