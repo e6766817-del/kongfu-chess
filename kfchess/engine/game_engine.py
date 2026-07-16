@@ -42,6 +42,23 @@ class GameEngine:
         self._arbiter.settle()
         return self._arbiter.locked_remaining_ms(position)
 
+    def legal_destinations(self, position):
+        """All Positions the piece at `position` could legally move to
+        right now, per RuleEngine shape/path rules -- doesn't check
+        locking, since callers (the GUI's move-highlight overlay) only
+        ask this about an already-selected piece, which selection
+        already required to be unlocked."""
+        self._arbiter.settle()
+        piece = self._board.get(position)
+        if piece is None:
+            return []
+        return [
+            to_position
+            for to_position in self._board.all_positions()
+            if to_position != position
+            and self._rule_engine.evaluate(self._board, position, to_position, piece.color).is_legal
+        ]
+
     def request_move(self, from_position, to_position):
         self._arbiter.settle()
         if self._arbiter.is_game_over():

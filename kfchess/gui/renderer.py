@@ -9,6 +9,10 @@ from kfchess.input.board_mapper import CELL_SIZE_PX
 SELECTION_OUTLINE_COLOR = (0, 255, 255, 255)  # BGRA, yellow
 SELECTION_OUTLINE_THICKNESS = 4
 
+MOVE_HIGHLIGHT_COLOR = (0, 200, 0, 255)  # BGRA, green -- empty legal destination
+CAPTURE_HIGHLIGHT_COLOR = (0, 0, 220, 255)  # BGRA, red -- legal capture destination
+MOVE_HIGHLIGHT_ALPHA = 0.4
+
 GAME_OVER_TEXT = "GAME OVER"
 GAME_OVER_DIM_COLOR = (0, 0, 0, 255)  # BGRA, black
 GAME_OVER_DIM_ALPHA = 0.55
@@ -32,13 +36,18 @@ class Renderer:
 
     def render(
         self, board, animations_by_piece_id, dt_ms, selected_position=None, game_over=False,
-        cooldown_remaining_ms_by_position=None,
+        cooldown_remaining_ms_by_position=None, move_destinations=None, capture_destinations=None,
     ):
         """Return one composed Img for this frame."""
         self._clock.tick(dt_ms)
         self._hud_message.tick(dt_ms)
 
         canvas = self._board_view.new_canvas()
+
+        for position in move_destinations or ():
+            self._draw_highlight(canvas, position, MOVE_HIGHLIGHT_COLOR)
+        for position in capture_destinations or ():
+            self._draw_highlight(canvas, position, CAPTURE_HIGHLIGHT_COLOR)
 
         if selected_position is not None:
             x, y = self._board_view.cell_to_pixel(selected_position)
@@ -73,6 +82,16 @@ class Renderer:
             self._draw_game_over_banner(canvas)
 
         return canvas
+
+    def _draw_highlight(self, canvas, position, color):
+        """Tint `position`'s cell with `color` at MOVE_HIGHLIGHT_ALPHA, so
+        a selected piece's reachable cells read at a glance -- green for
+        an empty destination, red for a capture."""
+        x, y = self._board_view.cell_to_pixel(position)
+        overlay_region = canvas.img[y : y + CELL_SIZE_PX, x : x + CELL_SIZE_PX]
+        tint_layer = overlay_region.copy()
+        tint_layer[:, :] = color[: canvas.img.shape[2]]
+        cv2.addWeighted(tint_layer, MOVE_HIGHLIGHT_ALPHA, overlay_region, 1 - MOVE_HIGHLIGHT_ALPHA, 0, overlay_region)
 
     def _draw_cooldown_overlay(self, canvas, position, remaining_ms):
         """Dim a resting piece's own cell and stamp the seconds left on

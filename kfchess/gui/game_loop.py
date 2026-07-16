@@ -78,10 +78,13 @@ class GameLoop:
 
                 game_over = self._game_engine.is_game_over()
                 cooldown_remaining_ms_by_position = self._cooldown_remaining_ms_by_position(board)
+                move_destinations, capture_destinations = self._legal_destinations_by_kind(board)
                 frame = self._renderer.render(
                     board, self._animations_by_piece_id, dt_ms, self._game_state.selected_position,
                     game_over=game_over,
                     cooldown_remaining_ms_by_position=cooldown_remaining_ms_by_position,
+                    move_destinations=move_destinations,
+                    capture_destinations=capture_destinations,
                 )
                 cv2.imshow(WINDOW_NAME, frame.img)
 
@@ -171,6 +174,18 @@ class GameLoop:
                 continue
             remaining_by_position[position] = self._game_engine.locked_remaining_ms(position)
         return remaining_by_position
+
+    def _legal_destinations_by_kind(self, board):
+        """(empty_destinations, capture_destinations) for the currently
+        selected piece, for Renderer to paint green/red move highlights
+        -- empty if nothing is selected."""
+        selected_position = self._game_state.selected_position
+        if selected_position is None:
+            return [], []
+        destinations = self._game_engine.legal_destinations(selected_position)
+        empty_destinations = [pos for pos in destinations if board.get(pos) is None]
+        capture_destinations = [pos for pos in destinations if board.get(pos) is not None]
+        return empty_destinations, capture_destinations
 
     def _on_mouse(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
