@@ -52,6 +52,22 @@ def test_long_rest_scales_with_distance_traveled():
     assert engine.is_locked(Position(0, 3)) is False
 
 
+def test_locked_remaining_ms_counts_down_during_long_rest():
+    board = build_board([["wR", ".", "."]])
+    engine = GameEngine(board)
+    long_rest_ms = 2 * LONG_REST_MS_PER_CELL  # 2-cell move
+
+    engine.request_move(Position(0, 0), Position(0, 2))
+    engine.advance_clock(2 * MS_PER_CELL)  # move arrives, long_rest starts
+    assert engine.locked_remaining_ms(Position(0, 2)) == long_rest_ms
+
+    engine.advance_clock(500)
+    assert engine.locked_remaining_ms(Position(0, 2)) == long_rest_ms - 500
+
+    engine.advance_clock(long_rest_ms - 500)
+    assert engine.locked_remaining_ms(Position(0, 2)) == 0
+
+
 def test_jump_landing_starts_short_rest_then_unlocks():
     board = build_board([["wN", "."]])
     engine = GameEngine(board)
