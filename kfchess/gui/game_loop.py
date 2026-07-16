@@ -77,9 +77,11 @@ class GameLoop:
                     animation.advance(dt_ms)
 
                 game_over = self._game_engine.is_game_over()
+                cooldown_remaining_ms_by_position = self._cooldown_remaining_ms_by_position(board)
                 frame = self._renderer.render(
                     board, self._animations_by_piece_id, dt_ms, self._game_state.selected_position,
                     game_over=game_over,
+                    cooldown_remaining_ms_by_position=cooldown_remaining_ms_by_position,
                 )
                 cv2.imshow(WINDOW_NAME, frame.img)
 
@@ -153,6 +155,22 @@ class GameLoop:
                 continue
             if not self._game_engine.is_locked(position):
                 animation.on_rest_settled()
+
+    def _cooldown_remaining_ms_by_position(self, board):
+        """Positions of pieces currently in their SHORT_REST/LONG_REST
+        animation, mapped to milliseconds left on RealTimeArbiter's real
+        cooldown lock -- what Renderer overlays on the cell so a resting
+        piece visibly can't be reselected yet."""
+        remaining_by_position = {}
+        for position in board.all_positions():
+            piece = board.get(position)
+            if piece is None:
+                continue
+            animation = self._animations_by_piece_id.get(piece.id)
+            if animation is None or animation.state_name not in (SHORT_REST, LONG_REST):
+                continue
+            remaining_by_position[position] = self._game_engine.locked_remaining_ms(position)
+        return remaining_by_position
 
     def _on_mouse(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:

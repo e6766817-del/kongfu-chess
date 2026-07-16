@@ -151,6 +151,21 @@ class RealTimeArbiter:
     def is_locked(self, position):
         return self.lock_state(position) != IDLE
 
+    def locked_remaining_ms(self, position):
+        """Milliseconds until position's lock (MOVING/AIRBORNE/RESTING)
+        releases, or 0 if it's IDLE. Used by the GUI to show a cooldown
+        countdown over a RESTING piece's cell."""
+        move = self._find_moving(position)
+        if move is not None:
+            return max(0, move.arrival_time_ms - self._clock_ms)
+        jump = self._find_airborne(position)
+        if jump is not None:
+            return max(0, jump.end_time_ms - self._clock_ms)
+        rest = self._find_resting(position)
+        if rest is not None:
+            return max(0, rest.end_time_ms - self._clock_ms)
+        return 0
+
     def _enter_lock(self, position, new_state):
         current = self.lock_state(position)
         if current != IDLE:
@@ -296,7 +311,13 @@ class RealTimeArbiter:
         return self._rule_engine.evaluate(self._board, move.from_position, move.to_position, move.color).is_legal
 
     def _is_moving(self, position):
-        return any(move.from_position == position for move in self._pending_moves)
+        return self._find_moving(position) is not None
+
+    def _find_moving(self, position):
+        for move in self._pending_moves:
+            if move.from_position == position:
+                return move
+        return None
 
     def _is_airborne(self, position):
         return self._find_airborne(position) is not None

@@ -16,6 +16,12 @@ GAME_OVER_TEXT_COLOR = (255, 255, 255, 255)  # BGRA, white
 GAME_OVER_FONT_SCALE = 2.2
 GAME_OVER_THICKNESS = 4
 
+COOLDOWN_DIM_COLOR = (0, 0, 0, 255)  # BGRA, black
+COOLDOWN_DIM_ALPHA = 0.45
+COOLDOWN_TEXT_COLOR = (255, 255, 255, 255)  # BGRA, white
+COOLDOWN_FONT_SCALE = 0.9
+COOLDOWN_THICKNESS = 2
+
 
 class Renderer:
     def __init__(self, board_view, clock, side_panels, hud_message):
@@ -24,7 +30,10 @@ class Renderer:
         self._side_panels = side_panels
         self._hud_message = hud_message
 
-    def render(self, board, animations_by_piece_id, dt_ms, selected_position=None, game_over=False):
+    def render(
+        self, board, animations_by_piece_id, dt_ms, selected_position=None, game_over=False,
+        cooldown_remaining_ms_by_position=None,
+    ):
         """Return one composed Img for this frame."""
         self._clock.tick(dt_ms)
         self._hud_message.tick(dt_ms)
@@ -52,6 +61,9 @@ class Renderer:
             x, y = pixel if pixel is not None else self._board_view.cell_to_pixel(position)
             animation.current_frame().draw_on(canvas, int(x), int(y))
 
+        for position, remaining_ms in (cooldown_remaining_ms_by_position or {}).items():
+            self._draw_cooldown_overlay(canvas, position, remaining_ms)
+
         self._clock.draw(canvas)
         for side_panel in self._side_panels:
             side_panel.draw(canvas)
@@ -61,6 +73,30 @@ class Renderer:
             self._draw_game_over_banner(canvas)
 
         return canvas
+
+    def _draw_cooldown_overlay(self, canvas, position, remaining_ms):
+        """Dim a resting piece's own cell and stamp the seconds left on
+        its cooldown, so it reads at a glance as "can't be reselected
+        yet" rather than just holding on its last rest-animation frame."""
+        if remaining_ms <= 0:
+            return
+        x, y = self._board_view.cell_to_pixel(position)
+        overlay_region = canvas.img[y : y + CELL_SIZE_PX, x : x + CELL_SIZE_PX]
+        dim_layer = overlay_region.copy()
+        dim_layer[:, :] = COOLDOWN_DIM_COLOR[: canvas.img.shape[2]]
+        cv2.addWeighted(dim_layer, COOLDOWN_DIM_ALPHA, overlay_region, 1 - COOLDOWN_DIM_ALPHA, 0, overlay_region)
+
+        seconds_left = (remaining_ms + 99) // 100 / 10  # round up to nearest 0.1s
+        text = f"{seconds_left:.1f}"
+        (text_w, text_h), _baseline = cv2.getTextSize(
+            text, cv2.FONT_HERSHEY_SIMPLEX, COOLDOWN_FONT_SCALE, COOLDOWN_THICKNESS
+        )
+        text_x = x + (CELL_SIZE_PX - text_w) // 2
+        text_y = y + (CELL_SIZE_PX + text_h) // 2
+        cv2.putText(
+            canvas.img, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX,
+            COOLDOWN_FONT_SCALE, COOLDOWN_TEXT_COLOR, COOLDOWN_THICKNESS, cv2.LINE_AA,
+        )
 
     def _draw_game_over_banner(self, canvas):
         """Dim the whole frame and stamp a big centered GAME OVER label,

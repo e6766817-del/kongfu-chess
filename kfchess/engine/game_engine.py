@@ -38,6 +38,10 @@ class GameEngine:
         self._arbiter.settle()
         return self._arbiter.is_locked(position)
 
+    def locked_remaining_ms(self, position):
+        self._arbiter.settle()
+        return self._arbiter.locked_remaining_ms(position)
+
     def request_move(self, from_position, to_position):
         self._arbiter.settle()
         if self._arbiter.is_game_over():
