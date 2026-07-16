@@ -73,7 +73,7 @@ class PieceAnimationState:
         from/to cells; duration_ms is result.arrival_time_ms minus the
         engine clock at accept time -- the exact real-time window
         GameEngine will keep this cell locked for (itself derived from
-        RealTimeArbiter.PIECE_SPEED_M_PER_SEC, not a guess). current_pixel()
+        RealTimeArbiter.MS_PER_CELL, not a guess). current_pixel()
         interpolates across that window so the sprite lands on
         destination_px at the same moment the engine actually unlocks the
         cell, rather than teleporting there.

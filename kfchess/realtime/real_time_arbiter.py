@@ -26,18 +26,17 @@ from kfchess.realtime.motion import (
 )
 from kfchess.rules.piece_rules import line_path_cells, pawn_promotion_row, steps
 
-# Every piece's move config.json (see assets/pieces1|2/*/states/move/
-# config.json) specifies physics.speed_m_per_sec: 1.5, uniformly across
-# every piece kind, color and skin. kfchess stays free of any GUI/asset
-# dependency (no cv2, no reading assets/ at runtime), so that value is
-# mirrored here as a plain constant rather than read from disk -- if the
-# asset packs ever change it, update PIECE_SPEED_M_PER_SEC to match.
-# CELL_SIZE_METERS is this simulation's own modeling choice (a board
-# cell represents 1 meter of travel); together they replace the old
-# flat "1 second per cell" guess with the assets' real intended speed.
-PIECE_SPEED_M_PER_SEC = 1.5
-CELL_SIZE_METERS = 1.0
-MS_PER_CELL = round(CELL_SIZE_METERS / PIECE_SPEED_M_PER_SEC * 1000)
+# How long a piece takes to cross one cell while moving. kfchess stays
+# free of any GUI/asset dependency (no cv2, no reading assets/ at
+# runtime), so this is a plain gameplay-timing constant, not derived
+# from any physical unit -- it just happens to equal the real-world
+# speed the assets/pieces1|2/*/states/move/config.json sprites were
+# authored to (physics.speed_m_per_sec: 1.5, over a 1-unit cell),
+# mirrored here as a round number. The meters-per-second/cell-size
+# framing that produced it belongs to the GUI's asset-driven animation
+# timing, not to core game logic -- if the asset packs' speed ever
+# changes, update this constant to match by hand.
+MS_PER_CELL = 667
 
 # A cell's lock state: IDLE (free to move/jump from), MOVING (source cell
 # of a pending move, until arrival), AIRBORNE (mid-jump, until landing),
