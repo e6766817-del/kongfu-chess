@@ -31,6 +31,7 @@ from kfchess.gui.hud_message import HudMessage
 from kfchess.gui.piece_sprites import SpriteSetCache
 from kfchess.gui.renderer import Renderer
 from kfchess.gui.side_panel import SidePanel
+from kfchess.gui.skin_menu import SkinMenu
 
 # Standard chess starting position, in the "<color><kind>" token format
 # kfchess.io.validator.build_board expects (see kfchess.io.pieces_config).
@@ -77,14 +78,22 @@ def build_game_loop(game_engine, game_state, controller, skin=DEFAULT_SKIN):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Kung-fu chess GUI.")
-    parser.add_argument("--skin", choices=AVAILABLE_SKINS, default=DEFAULT_SKIN)
+    parser.add_argument(
+        "--skin", choices=AVAILABLE_SKINS, default=None,
+        help="Skip the in-app skin picker and start directly with this skin.",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    skin = args.skin
+    if skin is None:
+        skin = SkinMenu().run()
+        if skin is None:
+            return
     game_engine, game_state, controller = build_game()
-    game_loop = build_game_loop(game_engine, game_state, controller, skin=args.skin)
+    game_loop = build_game_loop(game_engine, game_state, controller, skin=skin)
     game_loop.run()
 
 
