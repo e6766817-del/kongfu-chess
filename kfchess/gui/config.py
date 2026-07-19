@@ -31,11 +31,26 @@ HUD_HEIGHT_PX = 70
 # player's own score/captures/move-history all live together on their
 # own side rather than sharing a strip under the board.
 SIDE_PANEL_WIDTH_PX = 240
-BOARD_X_OFFSET_PX = SIDE_PANEL_WIDTH_PX
-LEFT_PANEL_X = 0
-RIGHT_PANEL_X = BOARD_X_OFFSET_PX + BOARD_SIZE_PX[0]
 
-CANVAS_SIZE_PX = (SIDE_PANEL_WIDTH_PX * 2 + BOARD_SIZE_PX[0], BOARD_SIZE_PX[1] + HUD_HEIGHT_PX)
+# A thin frame around the board (outside the 8x8 grid) holds the file
+# letters (a-h, bottom edge) and rank numbers (1-8, left edge), like a
+# physical/professional chess board rather than stamping labels inside
+# the corner of each edge square. BOARD_X_OFFSET_PX / BOARD_Y_OFFSET_PX
+# are the pixel origin of the grid itself, past this margin -- anything
+# converting between pixels and cells (BoardView.cell_to_pixel,
+# kfchess.input.board_mapper.pixel_to_cell) must go through these two
+# offsets, not just BOARD_X_OFFSET_PX, now that the top has a margin too.
+BOARD_MARGIN_PX = 28
+BOARD_X_OFFSET_PX = SIDE_PANEL_WIDTH_PX + BOARD_MARGIN_PX
+BOARD_Y_OFFSET_PX = BOARD_MARGIN_PX
+LEFT_PANEL_X = 0
+RIGHT_PANEL_X = BOARD_X_OFFSET_PX + BOARD_SIZE_PX[0] + BOARD_MARGIN_PX
+
+# Top of the HUD strip (Clock / HudMessage), past the board's bottom
+# coordinate margin.
+HUD_TOP_PX = BOARD_Y_OFFSET_PX + BOARD_SIZE_PX[1] + BOARD_MARGIN_PX
+
+CANVAS_SIZE_PX = (RIGHT_PANEL_X + SIDE_PANEL_WIDTH_PX, HUD_TOP_PX + HUD_HEIGHT_PX)
 
 __all__ = [
     "CELL_SIZE_PX",
@@ -49,8 +64,11 @@ __all__ = [
     "SPRITE_SIZE_PX",
     "HUD_HEIGHT_PX",
     "SIDE_PANEL_WIDTH_PX",
+    "BOARD_MARGIN_PX",
     "BOARD_X_OFFSET_PX",
+    "BOARD_Y_OFFSET_PX",
     "LEFT_PANEL_X",
     "RIGHT_PANEL_X",
+    "HUD_TOP_PX",
     "CANVAS_SIZE_PX",
 ]

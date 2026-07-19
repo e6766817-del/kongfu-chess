@@ -17,7 +17,15 @@ from kfchess.model.game_state import GameState
 
 from kfchess.gui.board_view import BoardView
 from kfchess.gui.clock import Clock
-from kfchess.gui.config import AVAILABLE_SKINS, BOARD_SIZE_CELLS, BOARD_X_OFFSET_PX, DEFAULT_SKIN, LEFT_PANEL_X, RIGHT_PANEL_X
+from kfchess.gui.config import (
+    AVAILABLE_SKINS,
+    BOARD_SIZE_CELLS,
+    BOARD_X_OFFSET_PX,
+    BOARD_Y_OFFSET_PX,
+    DEFAULT_SKIN,
+    LEFT_PANEL_X,
+    RIGHT_PANEL_X,
+)
 from kfchess.gui.game_loop import GameLoop
 from kfchess.gui.hud_message import HudMessage
 from kfchess.gui.piece_sprites import SpriteSetCache
@@ -42,10 +50,13 @@ def build_game():
     board = build_board(STARTING_GRID)
     game_engine = GameEngine(board)
     game_state = GameState(board)
-    # The board is drawn past the left SidePanel (see BoardView.cell_to_pixel),
-    # so raw mouse clicks need the same x_offset to land on the right cell.
+    # The board is drawn past the left SidePanel and its own coordinate
+    # margin (see BoardView.cell_to_pixel), so raw mouse clicks need the
+    # same x/y offsets to land on the right cell.
     gui_board_mapper = SimpleNamespace(
-        pixel_to_cell=functools.partial(board_mapper.pixel_to_cell, x_offset=BOARD_X_OFFSET_PX)
+        pixel_to_cell=functools.partial(
+            board_mapper.pixel_to_cell, x_offset=BOARD_X_OFFSET_PX, y_offset=BOARD_Y_OFFSET_PX
+        )
     )
     controller = Controller(game_engine, game_state, board_mapper=gui_board_mapper)
     return game_engine, game_state, controller
@@ -54,8 +65,8 @@ def build_game():
 def build_game_loop(game_engine, game_state, controller, skin=DEFAULT_SKIN):
     board_view = BoardView(skin)
     clock = Clock()
-    white_panel = SidePanel("w", LEFT_PANEL_X, BOARD_SIZE_CELLS)
-    black_panel = SidePanel("b", RIGHT_PANEL_X, BOARD_SIZE_CELLS)
+    white_panel = SidePanel("w", LEFT_PANEL_X, BOARD_SIZE_CELLS, skin=skin)
+    black_panel = SidePanel("b", RIGHT_PANEL_X, BOARD_SIZE_CELLS, skin=skin)
     game_engine.add_observer(white_panel)
     game_engine.add_observer(black_panel)
     hud_message = HudMessage()

@@ -30,7 +30,7 @@ import time
 import cv2
 
 from kfchess.gui.animation import LONG_REST, SHORT_REST, PieceAnimationState
-from kfchess.gui.config import BOARD_X_OFFSET_PX
+from kfchess.gui.config import BOARD_X_OFFSET_PX, BOARD_Y_OFFSET_PX
 from kfchess.input.board_mapper import pixel_to_cell
 
 WINDOW_NAME = "Kung Fu Chess"
@@ -207,13 +207,15 @@ class GameLoop:
         animation = self._animations_by_piece_id.get(piece.id) if piece else None
         if animation is not None:
             origin_px = self._board_view.cell_to_pixel(prior_selection)
-            destination_px = self._board_view.cell_to_pixel(pixel_to_cell(x, y, x_offset=BOARD_X_OFFSET_PX))
+            destination_px = self._board_view.cell_to_pixel(
+                pixel_to_cell(x, y, x_offset=BOARD_X_OFFSET_PX, y_offset=BOARD_Y_OFFSET_PX)
+            )
             duration_ms = result.arrival_time_ms - self._engine_clock_ms
             animation.start_move(origin_px, destination_px, duration_ms)
             self._in_flight_moves[piece.id] = prior_selection
 
     def _handle_jump_click(self, x, y):
-        position = pixel_to_cell(x, y, x_offset=BOARD_X_OFFSET_PX)
+        position = pixel_to_cell(x, y, x_offset=BOARD_X_OFFSET_PX, y_offset=BOARD_Y_OFFSET_PX)
         was_locked = self._game_engine.is_locked(position)
         self._controller.handle_jump_at_pixel(x, y)
 
