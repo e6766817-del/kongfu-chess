@@ -79,7 +79,7 @@ class Renderer:
         self._hud_message.draw(canvas)
 
         if game_over:
-            self._draw_game_over_banner(canvas)
+            self.draw_banner(canvas, GAME_OVER_TEXT)
 
         return canvas
 
@@ -117,21 +117,22 @@ class Renderer:
             COOLDOWN_FONT_SCALE, COOLDOWN_TEXT_COLOR, COOLDOWN_THICKNESS, cv2.LINE_AA,
         )
 
-    def _draw_game_over_banner(self, canvas):
-        """Dim the whole frame and stamp a big centered GAME OVER label,
-        shown for GameLoop's post-game display window before it closes
-        the window."""
+    def draw_banner(self, canvas, text):
+        """Dim the whole frame and stamp a big centered label -- used for
+        the GAME OVER banner, and callable directly by GameLoop for a
+        networked opponent-disconnect message (drawn on the last frame
+        once the game loop stops updating)."""
         height, width = canvas.img.shape[:2]
         dim_layer = canvas.img.copy()
         dim_layer[:, :] = GAME_OVER_DIM_COLOR[: canvas.img.shape[2]]
         cv2.addWeighted(dim_layer, GAME_OVER_DIM_ALPHA, canvas.img, 1 - GAME_OVER_DIM_ALPHA, 0, canvas.img)
 
         (text_w, text_h), _baseline = cv2.getTextSize(
-            GAME_OVER_TEXT, cv2.FONT_HERSHEY_SIMPLEX, GAME_OVER_FONT_SCALE, GAME_OVER_THICKNESS
+            text, cv2.FONT_HERSHEY_SIMPLEX, GAME_OVER_FONT_SCALE, GAME_OVER_THICKNESS
         )
         x = (width - text_w) // 2
         y = (height + text_h) // 2
         cv2.putText(
-            canvas.img, GAME_OVER_TEXT, (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+            canvas.img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX,
             GAME_OVER_FONT_SCALE, GAME_OVER_TEXT_COLOR, GAME_OVER_THICKNESS, cv2.LINE_AA,
         )

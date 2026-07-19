@@ -70,5 +70,9 @@ def game_over():
     return {"type": "game_over"}
 
 
+def opponent_disconnected():
+    return {"type": "opponent_disconnected"}
+
+
 def error(message):
     return {"type": "error", "message": message}

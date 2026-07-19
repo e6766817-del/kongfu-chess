@@ -44,6 +44,8 @@ async def handle_connection(websocket, queue):
             await session.handle_client_message(connection, json.loads(raw_message))
     except websockets.exceptions.ConnectionClosed:
         pass  # the other player's window closing mid-game is a normal disconnect, not an error
+    finally:
+        await session.handle_disconnect(connection)
 
 
 def make_handler(queue):

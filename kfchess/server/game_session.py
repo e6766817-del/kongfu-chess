@@ -53,6 +53,10 @@ class GameSession:
         white.color, black.color = "w", "b"
         self._connections = {"w": white, "b": black}
         self._tick_ms = tick_ms
+        # Set once by handle_disconnect (a player's socket closing mid-game)
+        # or once the game reaches a natural end -- either way, run()'s tick
+        # loop stops and no further per-tick broadcasts are sent.
+        self._active = True
 
     async def _send(self, connection, message):
         # A player closing their window mid-game is a normal disconnect,
@@ -73,13 +77,24 @@ class GameSession:
         for color, connection in self._connections.items():
             await self._send(connection, protocol.match_found(color, board_rows))
 
-        while not self._engine.is_game_over():
+        while self._active and not self._engine.is_game_over():
             self._engine.advance_clock(self._tick_ms)
             while self._outgoing:
                 await self._broadcast(self._outgoing.pop(0))
             await asyncio.sleep(self._tick_ms / 1000)
 
-        await self._broadcast(protocol.game_over())
+        if self._active:
+            await self._broadcast(protocol.game_over())
+
+    async def handle_disconnect(self, connection):
+        """Called once a player's socket closes -- stops run()'s tick loop
+        (a disconnected game shouldn't keep ticking for a lone remaining
+        player) and tells the other connection why, instead of just going
+        silent or letting them play on alone."""
+        if not self._active:
+            return
+        self._active = False
+        await self._send(self._opponent_of(connection), protocol.opponent_disconnected())
 
     async def handle_client_message(self, connection, message):
         message_type = message.get("type")

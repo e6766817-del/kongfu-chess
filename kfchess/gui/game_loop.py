@@ -57,6 +57,11 @@ class GameLoop:
         # opponent_move/opponent_jump messages, replayed into this same
         # local GameEngine so both clients animate identically.
         self._network_client = network_client
+        # Set by _poll_network on an opponent_disconnected message -- run()
+        # checks this each frame and stops updating the game (no more
+        # advance_clock/animation/input) instead of quietly playing on
+        # alone, then freezes on a banner over the last rendered frame.
+        self._opponent_disconnected = False
         self._animations_by_piece_id = {}
         # piece_id -> origin Position, while its MOVE animation waits for arrival
         self._in_flight_moves = {}
@@ -70,6 +75,7 @@ class GameLoop:
         cv2.setMouseCallback(WINDOW_NAME, self._on_mouse)
 
         last_tick = time.perf_counter()
+        frame = None
         try:
             while True:
                 now = time.perf_counter()
@@ -78,6 +84,8 @@ class GameLoop:
 
                 if self._network_client is not None:
                     self._poll_network()
+                if self._opponent_disconnected:
+                    break
 
                 self._game_engine.advance_clock(dt_ms)
                 self._engine_clock_ms += dt_ms
@@ -109,6 +117,15 @@ class GameLoop:
                 if game_over:
                     self._hold_game_over_screen()
                     break
+
+            if self._opponent_disconnected:
+                if frame is None:
+                    frame = self._renderer.render(
+                        self._game_engine.board(), self._animations_by_piece_id, 0, self._game_state.selected_position
+                    )
+                self._renderer.draw_banner(frame, "Opponent disconnected.")
+                cv2.imshow(WINDOW_NAME, frame.img)
+                self._hold_game_over_screen()
         finally:
             cv2.destroyAllWindows()
 
@@ -145,6 +162,8 @@ class GameLoop:
                 self._hud_message.show(message["message"])
             elif message_type == "move_result" and not message["accepted"]:
                 self._hud_message.show(message["reason"])
+            elif message_type == "opponent_disconnected":
+                self._opponent_disconnected = True
 
     def _sync_animations(self, board):
         """Create a PieceAnimationState (idle) for any newly-seen piece,
