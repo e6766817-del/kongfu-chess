@@ -7,6 +7,8 @@ connections.
 import asyncio
 import json
 
+import websockets
+
 from kfchess.engine.game_engine import GameEngine
 from kfchess.io.board_printer import render as render_board
 from kfchess.io.validator import build_board
@@ -53,7 +55,14 @@ class GameSession:
         self._tick_ms = tick_ms
 
     async def _send(self, connection, message):
-        await connection.websocket.send(json.dumps(message))
+        # A player closing their window mid-game is a normal disconnect,
+        # not a session-ending error -- swallow it so the tick loop keeps
+        # running (and the other player's own requests keep getting
+        # replies) rather than crashing the whole session task.
+        try:
+            await connection.websocket.send(json.dumps(message))
+        except websockets.exceptions.ConnectionClosed:
+            pass
 
     async def _broadcast(self, message):
         for connection in self._connections.values():
@@ -77,17 +86,31 @@ class GameSession:
         if message_type == "move":
             from_position = Position(*message["from"])
             to_position = Position(*message["to"])
-            await self._dispatch(connection, from_position, lambda: self._engine.request_move(from_position, to_position))
+            await self._dispatch(
+                connection, from_position,
+                request=lambda: self._engine.request_move(from_position, to_position),
+                on_accept=lambda piece: protocol.opponent_move(piece.color, piece.kind, from_position, to_position),
+            )
         elif message_type == "jump":
             position = Position(*message["position"])
-            await self._dispatch(connection, position, lambda: self._engine.request_jump(position))
+            await self._dispatch(
+                connection, position,
+                request=lambda: self._engine.request_jump(position),
+                on_accept=lambda piece: protocol.opponent_jump(piece.color, piece.kind, position),
+            )
         else:
             await self._send(connection, protocol.error(f"unknown message type: {message_type}"))
 
-    async def _dispatch(self, connection, piece_position, request):
+    async def _dispatch(self, connection, piece_position, request, on_accept):
         piece = self._engine.board().get(piece_position)
         if piece is None or piece.color != connection.color:
             await self._send(connection, protocol.error("no piece of your color at that position"))
             return
         result = request()
         await self._send(connection, protocol.move_result(result.accepted, result.reason, result.arrival_time_ms))
+        if result.accepted:
+            opponent = self._opponent_of(connection)
+            await self._send(opponent, on_accept(piece))
+
+    def _opponent_of(self, connection):
+        return self._connections["b"] if connection is self._connections["w"] else self._connections["w"]

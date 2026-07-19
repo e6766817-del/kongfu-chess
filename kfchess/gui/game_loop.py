@@ -32,6 +32,7 @@ import cv2
 from kfchess.gui.animation import LONG_REST, SHORT_REST, PieceAnimationState
 from kfchess.gui.config import BOARD_X_OFFSET_PX, BOARD_Y_OFFSET_PX
 from kfchess.input.board_mapper import pixel_to_cell
+from kfchess.model.position import Position
 
 WINDOW_NAME = "Kung Fu Chess"
 QUIT_KEYS = (ord("q"), 27)  # 'q' or Esc
@@ -39,7 +40,10 @@ GAME_OVER_DISPLAY_SECONDS = 3.0
 
 
 class GameLoop:
-    def __init__(self, game_engine, game_state, controller, renderer, board_view, sprite_set_cache, hud_message):
+    def __init__(
+        self, game_engine, game_state, controller, renderer, board_view, sprite_set_cache, hud_message,
+        network_client=None,
+    ):
         self._game_engine = game_engine
         self._game_state = game_state
         self._controller = controller
@@ -47,6 +51,12 @@ class GameLoop:
         self._board_view = board_view
         self._sprite_set_cache = sprite_set_cache
         self._hud_message = hud_message
+        # Set only by the networked GUI (see gui.main's online mode) -- when
+        # present, the local player's accepted moves/jumps are also sent to
+        # kfchess.server, and the opponent's moves arrive back as
+        # opponent_move/opponent_jump messages, replayed into this same
+        # local GameEngine so both clients animate identically.
+        self._network_client = network_client
         self._animations_by_piece_id = {}
         # piece_id -> origin Position, while its MOVE animation waits for arrival
         self._in_flight_moves = {}
@@ -65,6 +75,9 @@ class GameLoop:
                 now = time.perf_counter()
                 dt_ms = max(0, int((now - last_tick) * 1000))
                 last_tick = now
+
+                if self._network_client is not None:
+                    self._poll_network()
 
                 self._game_engine.advance_clock(dt_ms)
                 self._engine_clock_ms += dt_ms
@@ -108,6 +121,30 @@ class GameLoop:
             cv2.waitKey(50)
             if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
                 break
+
+    def _poll_network(self):
+        """Replays the opponent's moves/jumps (received since last frame)
+        into this local GameEngine, and surfaces a HUD message if the
+        server ever rejects one of our own requests -- which the local
+        Controller should already have prevented, so this only fires on a
+        genuine client/server desync."""
+        for message in self._network_client.poll_messages():
+            message_type = message["type"]
+            if message_type == "opponent_move":
+                from_position = Position(*message["from"])
+                to_position = Position(*message["to"])
+                result = self._game_engine.request_move(from_position, to_position)
+                if result.accepted:
+                    self._start_move_animation(from_position, to_position, result.arrival_time_ms)
+            elif message_type == "opponent_jump":
+                position = Position(*message["position"])
+                result = self._game_engine.request_jump(position)
+                if result.accepted:
+                    self._start_jump_animation(position)
+            elif message_type == "error":
+                self._hud_message.show(message["message"])
+            elif message_type == "move_result" and not message["accepted"]:
+                self._hud_message.show(message["reason"])
 
     def _sync_animations(self, board):
         """Create a PieceAnimationState (idle) for any newly-seen piece,
@@ -203,16 +240,10 @@ class GameLoop:
         if not result.accepted:
             self._hud_message.show(result.reason)
             return
-        piece = self._game_engine.board().get(prior_selection)
-        animation = self._animations_by_piece_id.get(piece.id) if piece else None
-        if animation is not None:
-            origin_px = self._board_view.cell_to_pixel(prior_selection)
-            destination_px = self._board_view.cell_to_pixel(
-                pixel_to_cell(x, y, x_offset=BOARD_X_OFFSET_PX, y_offset=BOARD_Y_OFFSET_PX)
-            )
-            duration_ms = result.arrival_time_ms - self._engine_clock_ms
-            animation.start_move(origin_px, destination_px, duration_ms)
-            self._in_flight_moves[piece.id] = prior_selection
+        destination = pixel_to_cell(x, y, x_offset=BOARD_X_OFFSET_PX, y_offset=BOARD_Y_OFFSET_PX)
+        if self._network_client is not None:
+            self._network_client.send_move(prior_selection, destination)
+        self._start_move_animation(prior_selection, destination, result.arrival_time_ms)
 
     def _handle_jump_click(self, x, y):
         position = pixel_to_cell(x, y, x_offset=BOARD_X_OFFSET_PX, y_offset=BOARD_Y_OFFSET_PX)
@@ -222,6 +253,25 @@ class GameLoop:
         jump_was_accepted = not was_locked and self._game_engine.is_locked(position)
         if not jump_was_accepted:
             return
+        if self._network_client is not None:
+            self._network_client.send_jump(position)
+        self._start_jump_animation(position)
+
+    def _start_move_animation(self, from_position, to_position, arrival_time_ms):
+        """Shared by a local player's own accepted move click and by a
+        replayed opponent_move -- both need the exact same slide timing so
+        the sprite lands on the destination cell the moment GameEngine
+        actually unlocks it (see module docstring)."""
+        piece = self._game_engine.board().get(from_position)
+        animation = self._animations_by_piece_id.get(piece.id) if piece else None
+        if animation is not None:
+            origin_px = self._board_view.cell_to_pixel(from_position)
+            destination_px = self._board_view.cell_to_pixel(to_position)
+            duration_ms = arrival_time_ms - self._engine_clock_ms
+            animation.start_move(origin_px, destination_px, duration_ms)
+            self._in_flight_moves[piece.id] = from_position
+
+    def _start_jump_animation(self, position):
         piece = self._game_engine.board().get(position)
         animation = self._animations_by_piece_id.get(piece.id) if piece else None
         if animation is not None:

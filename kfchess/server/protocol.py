@@ -29,6 +29,29 @@ def move_result(accepted, reason=None, arrival_time_ms=None):
     }
 
 
+def opponent_move(color, piece_type, from_position, to_position):
+    """Sent to the *other* connection the instant a move is accepted (not
+    when it settles) -- lets a networked GUI client replay the move into
+    its own local GameEngine right away, so it animates the same way a
+    locally-clicked move would."""
+    return {
+        "type": "opponent_move",
+        "color": color,
+        "piece_type": piece_type,
+        "from": [from_position.row, from_position.col],
+        "to": [to_position.row, to_position.col],
+    }
+
+
+def opponent_jump(color, piece_type, position):
+    return {
+        "type": "opponent_jump",
+        "color": color,
+        "piece_type": piece_type,
+        "position": [position.row, position.col],
+    }
+
+
 def move_settled(color, piece_type, from_position, to_position):
     return {
         "type": "move_settled",

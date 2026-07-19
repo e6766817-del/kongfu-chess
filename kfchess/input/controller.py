@@ -11,10 +11,15 @@ from kfchess.input import board_mapper as default_board_mapper
 
 
 class Controller:
-    def __init__(self, game_engine, game_state, board_mapper=default_board_mapper):
+    def __init__(self, game_engine, game_state, board_mapper=default_board_mapper, my_color=None):
         self._game_engine = game_engine
         self._game_state = game_state
         self._board_mapper = board_mapper
+        # Restricts selection/jump to pieces of this color -- unset for the
+        # single-process local drivers (texttests, single-window GUI) where
+        # one operator legitimately controls both colors; set to "w"/"b" by
+        # the networked GUI so a client can only ever act on its own side.
+        self._my_color = my_color
         # MoveResult (accepted + arrival_time_ms) from the most recent
         # handle_click_at_cell/pixel call, or None if that click wasn't a
         # move attempt. Exists so drivers that need exact arrival timing
@@ -39,7 +44,11 @@ class Controller:
         selected_position = self._game_state.selected_position
 
         if selected_position is None:
-            if clicked_piece is not None and not self._game_engine.is_locked(position):
+            if (
+                clicked_piece is not None
+                and not self._game_engine.is_locked(position)
+                and self._is_own_piece(clicked_piece)
+            ):
                 self._game_state.select(position)
             return
 
@@ -68,4 +77,10 @@ class Controller:
         board = self._game_engine.board()
         if not board.is_inside(position):
             return
+        piece = board.get(position)
+        if piece is None or not self._is_own_piece(piece):
+            return
         self._game_engine.request_jump(position)
+
+    def _is_own_piece(self, piece):
+        return self._my_color is None or piece.color == self._my_color
