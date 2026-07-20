@@ -28,6 +28,7 @@ from kfchess.gui.config import (
 )
 from kfchess.gui.game_loop import GameLoop
 from kfchess.gui.hud_message import HudMessage
+from kfchess.gui.login_screen import LoginScreen
 from kfchess.gui.matchmaking_screen import MatchmakingScreen
 from kfchess.gui.network_client import NetworkClient
 from kfchess.gui.piece_sprites import SpriteSetCache
@@ -71,16 +72,21 @@ def build_game():
 
 
 def build_online_game(server_uri):
-    """Connects to kfchess.server, blocks in the matchmaking screen until
-    a match is found (or the player quits / times out), then builds the
-    same GameEngine/GameState/Controller trio as local play -- Controller
-    is given my_color so it only ever acts on this client's own pieces,
-    and GameLoop is given the NetworkClient so it can send this player's
-    moves and replay the opponent's.
+    """Connects to kfchess.server, blocks in the login screen until the
+    player logs in (or quits), then blocks in the matchmaking screen
+    until a match is found (or the player quits / times out), then
+    builds the same GameEngine/GameState/Controller trio as local play
+    -- Controller is given my_color so it only ever acts on this
+    client's own pieces, and GameLoop is given the NetworkClient so it
+    can send this player's moves and replay the opponent's.
 
     Returns (game_engine, game_state, controller, network_client), or
-    None if no match was found."""
+    None if the player quits at either step."""
     network_client = NetworkClient(server_uri)
+    if LoginScreen(network_client).run() is None:
+        return None
+    network_client.join_queue()
+
     matched = MatchmakingScreen(network_client).run()
     if matched is None:
         return None

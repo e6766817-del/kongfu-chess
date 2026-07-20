@@ -34,6 +34,9 @@ class GameEngine:
         self._arbiter.settle()
         return self._arbiter.is_game_over()
 
+    def winner_color(self):
+        return self._arbiter.winner_color()
+
     def is_locked(self, position):
         self._arbiter.settle()
         return self._arbiter.is_locked(position)

@@ -55,6 +55,7 @@ def test_king_capture_ends_game():
 
     engine.advance_clock(2 * MS_PER_CELL)
     assert engine.is_game_over() is True
+    assert engine.winner_color() == "w"
     assert engine.board().get(Position(0, 2)).kind == "R"
 
 

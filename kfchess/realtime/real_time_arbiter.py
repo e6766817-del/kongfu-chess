@@ -79,6 +79,10 @@ class InvalidLockTransition(Exception):
     """Raised when something tries to lock a cell that isn't IDLE."""
 
 
+def _opposite_color(color):
+    return "b" if color == "w" else "w"
+
+
 def move_duration_ms(delta_row, delta_col):
     return steps(delta_row, delta_col) * MS_PER_CELL
 
@@ -97,6 +101,7 @@ class RealTimeArbiter:
         self._resting = []
         self._mid_path_captures = []
         self._game_over = False
+        self._winner_color = None
         self._observers = []
 
     def add_observer(self, observer):
@@ -137,6 +142,9 @@ class RealTimeArbiter:
 
     def is_game_over(self):
         return self._game_over
+
+    def winner_color(self):
+        return self._winner_color
 
     def lock_state(self, position):
         if self._is_moving(position):
@@ -189,6 +197,7 @@ class RealTimeArbiter:
                 self._notify_piece_captured(move.color, move.piece_type)
                 if move.piece_type == KING_TYPE:
                     self._game_over = True
+                    self._winner_color = airborne_jump.color
                 continue
 
             destination_piece = self._board.get(move.to_position)
@@ -199,6 +208,7 @@ class RealTimeArbiter:
                 self._notify_piece_captured(destination_piece.color, captured_type)
             if captured_type == KING_TYPE:
                 self._game_over = True
+                self._winner_color = move.color
             self._maybe_promote(move)
             delta_row, delta_col = move.from_position.delta_to(move.to_position)
             self._enter_rest(move.to_position, move.color, long_rest_duration_ms(delta_row, delta_col))
@@ -233,6 +243,7 @@ class RealTimeArbiter:
                 self._notify_piece_captured(capture.move.color, capture.move.piece_type)
                 if capture.move.piece_type == KING_TYPE:
                     self._game_over = True
+                    self._winner_color = _opposite_color(capture.move.color)
         self._mid_path_captures = still_pending
 
     def _interior_path_times(self, move):

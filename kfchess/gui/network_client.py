@@ -34,7 +34,6 @@ class NetworkClient:
         async with websockets.connect(self._uri) as websocket:
             self._websocket = websocket
             self._connected.set()
-            await websocket.send(json.dumps({"type": "join_queue"}))
             async for raw_message in websocket:
                 self._incoming.put(json.loads(raw_message))
 
@@ -48,6 +47,12 @@ class NetworkClient:
             except queue.Empty:
                 break
         return messages
+
+    def login(self, username, password):
+        self._send({"type": "login", "username": username, "password": password})
+
+    def join_queue(self):
+        self._send({"type": "join_queue"})
 
     def send_move(self, from_position, to_position):
         self._send({

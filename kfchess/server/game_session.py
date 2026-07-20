@@ -45,13 +45,14 @@ class _BroadcastObserver(ArbiterObserver):
 
 
 class GameSession:
-    def __init__(self, white, black, tick_ms=50):
+    def __init__(self, white, black, account_store, tick_ms=50):
         board = build_board(STARTING_GRID)
         self._engine = GameEngine(board)
         self._outgoing = []
         self._engine.add_observer(_BroadcastObserver(self._outgoing))
         white.color, black.color = "w", "b"
         self._connections = {"w": white, "b": black}
+        self._account_store = account_store
         self._tick_ms = tick_ms
         # Set once by handle_disconnect (a player's socket closing mid-game)
         # or once the game reaches a natural end -- either way, run()'s tick
@@ -84,7 +85,13 @@ class GameSession:
             await asyncio.sleep(self._tick_ms / 1000)
 
         if self._active:
-            await self._broadcast(protocol.game_over())
+            winner_color = self._engine.winner_color()
+            await self._broadcast(protocol.game_over(winner=winner_color))
+            if winner_color is not None:
+                loser_color = self._opponent_color(winner_color)
+                self._account_store.record_result(
+                    self._connections[winner_color].username, self._connections[loser_color].username
+                )
 
     async def handle_disconnect(self, connection):
         """Called once a player's socket closes -- stops run()'s tick loop
@@ -129,3 +136,7 @@ class GameSession:
 
     def _opponent_of(self, connection):
         return self._connections["b"] if connection is self._connections["w"] else self._connections["w"]
+
+    @staticmethod
+    def _opponent_color(color):
+        return "b" if color == "w" else "w"

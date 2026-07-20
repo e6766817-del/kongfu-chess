@@ -28,6 +28,18 @@ class Encoder(json.JSONEncoder):
 
 
 @dataclass
+class LoginOk:
+    rating: int
+    type: str = "login_ok"
+
+
+@dataclass
+class LoginError:
+    message: str
+    type: str = "login_error"
+
+
+@dataclass
 class Queued:
     type: str = "queued"
 
@@ -94,6 +106,7 @@ class PieceCaptured:
 
 @dataclass
 class GameOver:
+    winner: Optional[str] = None
     type: str = "game_over"
 
 
@@ -106,6 +119,14 @@ class OpponentDisconnected:
 class Error:
     message: str
     type: str = "error"
+
+
+def login_ok(rating):
+    return LoginOk(rating=rating)
+
+
+def login_error(message):
+    return LoginError(message=message)
 
 
 def queued():
@@ -150,8 +171,8 @@ def piece_captured(color, piece_type):
     return PieceCaptured(color=color, piece_type=piece_type)
 
 
-def game_over():
-    return GameOver()
+def game_over(winner=None):
+    return GameOver(winner=winner)
 
 
 def opponent_disconnected():
