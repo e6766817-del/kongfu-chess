@@ -22,9 +22,9 @@ async def handle_connection(websocket, queue):
 
     join_message = json.loads(await websocket.recv())
     if join_message.get("type") != "join_queue":
-        await websocket.send(json.dumps(protocol.error("expected join_queue")))
+        await websocket.send(json.dumps(protocol.error("expected join_queue"), cls=protocol.Encoder))
         return
-    await websocket.send(json.dumps(protocol.queued()))
+    await websocket.send(json.dumps(protocol.queued(), cls=protocol.Encoder))
 
     opponent = await queue.join(connection)
     if opponent is not None:
@@ -36,7 +36,7 @@ async def handle_connection(websocket, queue):
             _, session = await asyncio.wait_for(connection.matched, timeout=MATCHMAKING_TIMEOUT_SECONDS)
         except asyncio.TimeoutError:
             await queue.cancel_waiting(connection)
-            await websocket.send(json.dumps(protocol.no_opponent_found()))
+            await websocket.send(json.dumps(protocol.no_opponent_found(), cls=protocol.Encoder))
             return
 
     try:

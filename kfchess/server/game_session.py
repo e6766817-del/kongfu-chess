@@ -64,7 +64,7 @@ class GameSession:
         # running (and the other player's own requests keep getting
         # replies) rather than crashing the whole session task.
         try:
-            await connection.websocket.send(json.dumps(message))
+            await connection.websocket.send(json.dumps(message, cls=protocol.Encoder))
         except websockets.exceptions.ConnectionClosed:
             pass
 
