@@ -35,6 +35,7 @@ from kfchess.gui.piece_sprites import SpriteSetCache
 from kfchess.gui.renderer import Renderer
 from kfchess.gui.side_panel import SidePanel
 from kfchess.gui.skin_menu import SkinMenu
+from kfchess.gui.sound import SoundPlayer
 
 DEFAULT_SERVER_URI = "ws://localhost:8765"
 
@@ -106,12 +107,14 @@ def build_game_loop(game_engine, game_state, controller, skin=DEFAULT_SKIN, netw
     black_panel = SidePanel("b", RIGHT_PANEL_X, BOARD_SIZE_CELLS, skin=skin)
     game_engine.add_observer(white_panel)
     game_engine.add_observer(black_panel)
+    sound_player = SoundPlayer()
+    game_engine.add_observer(sound_player)
     hud_message = HudMessage()
     renderer = Renderer(board_view, clock, (white_panel, black_panel), hud_message)
     sprite_set_cache = SpriteSetCache(skin)
     return GameLoop(
         game_engine, game_state, controller, renderer, board_view, sprite_set_cache, hud_message,
-        network_client=network_client,
+        network_client=network_client, sound_player=sound_player,
     )
 
 

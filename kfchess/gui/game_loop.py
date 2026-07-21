@@ -31,6 +31,7 @@ import cv2
 
 from kfchess.gui.animation import LONG_REST, SHORT_REST, PieceAnimationState
 from kfchess.gui.config import BOARD_X_OFFSET_PX, BOARD_Y_OFFSET_PX
+from kfchess.gui.sound import SoundPlayer
 from kfchess.input.board_mapper import pixel_to_cell
 from kfchess.model.position import Position
 
@@ -42,7 +43,7 @@ GAME_OVER_DISPLAY_SECONDS = 3.0
 class GameLoop:
     def __init__(
         self, game_engine, game_state, controller, renderer, board_view, sprite_set_cache, hud_message,
-        network_client=None,
+        network_client=None, sound_player=None,
     ):
         self._game_engine = game_engine
         self._game_state = game_state
@@ -51,6 +52,11 @@ class GameLoop:
         self._board_view = board_view
         self._sprite_set_cache = sprite_set_cache
         self._hud_message = hud_message
+        # Registered as a GameEngine ArbiterObserver too (see gui.main), so
+        # it plays capture sounds on its own -- GameLoop only needs to
+        # trigger it directly for events the arbiter doesn't observe
+        # (click, move/jump acceptance, invalid moves, game over).
+        self._sound_player = sound_player or SoundPlayer()
         # Set only by the networked GUI (see gui.main's online mode) -- when
         # present, the local player's accepted moves/jumps are also sent to
         # kfchess.server, and the opponent's moves arrive back as
@@ -115,6 +121,7 @@ class GameLoop:
                 if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
                     break
                 if game_over:
+                    self._sound_player.play_game_over()
                     self._hold_game_over_screen()
                     break
 
@@ -152,11 +159,13 @@ class GameLoop:
                 to_position = Position(*message["to"])
                 result = self._game_engine.request_move(from_position, to_position)
                 if result.accepted:
+                    self._sound_player.play_move()
                     self._start_move_animation(from_position, to_position, result.arrival_time_ms)
             elif message_type == "opponent_jump":
                 position = Position(*message["position"])
                 result = self._game_engine.request_jump(position)
                 if result.accepted:
+                    self._sound_player.play_jump()
                     self._start_jump_animation(position)
             elif message_type == "error":
                 self._hud_message.show(message["message"])
@@ -255,13 +264,19 @@ class GameLoop:
 
         result = self._controller.last_move_result
         if prior_selection is None or result is None:
+            # Not a move attempt: either a fresh selection (or deselection
+            # / reselection of another own piece) -- still a clickable UI
+            # event worth a click sound.
+            self._sound_player.play_click()
             return
         if not result.accepted:
+            self._sound_player.play_invalid()
             self._hud_message.show(result.reason)
             return
         destination = pixel_to_cell(x, y, x_offset=BOARD_X_OFFSET_PX, y_offset=BOARD_Y_OFFSET_PX)
         if self._network_client is not None:
             self._network_client.send_move(prior_selection, destination)
+        self._sound_player.play_move()
         self._start_move_animation(prior_selection, destination, result.arrival_time_ms)
 
     def _handle_jump_click(self, x, y):
@@ -274,6 +289,7 @@ class GameLoop:
             return
         if self._network_client is not None:
             self._network_client.send_jump(position)
+        self._sound_player.play_jump()
         self._start_jump_animation(position)
 
     def _start_move_animation(self, from_position, to_position, arrival_time_ms):
