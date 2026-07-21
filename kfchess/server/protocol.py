@@ -48,6 +48,10 @@ class Queued:
 class MatchFound:
     color: str
     board: list
+    username: str
+    opponent_username: str
+    rating: int
+    opponent_rating: int
     type: str = "match_found"
 
 
@@ -133,8 +137,11 @@ def queued():
     return Queued()
 
 
-def match_found(color, board_rows):
-    return MatchFound(color=color, board=board_rows)
+def match_found(color, board_rows, username, opponent_username, rating, opponent_rating):
+    return MatchFound(
+        color=color, board=board_rows, username=username, opponent_username=opponent_username,
+        rating=rating, opponent_rating=opponent_rating,
+    )
 
 
 def no_opponent_found():

@@ -81,8 +81,9 @@ def build_online_game(server_uri):
     client's own pieces, and GameLoop is given the NetworkClient so it
     can send this player's moves and replay the opponent's.
 
-    Returns (game_engine, game_state, controller, network_client), or
-    None if the player quits at either step."""
+    Returns (game_engine, game_state, controller, network_client,
+    usernames_by_color, ratings_by_color), or None if the player quits at
+    either step."""
     network_client = NetworkClient(server_uri)
     if LoginScreen(network_client).run() is None:
         return None
@@ -92,19 +93,33 @@ def build_online_game(server_uri):
     if matched is None:
         return None
 
-    color, board_rows = matched
+    color, board_rows, username, opponent_username, rating, opponent_rating = matched
+    opponent_color = "b" if color == "w" else "w"
+    usernames_by_color = {color: username, opponent_color: opponent_username}
+    ratings_by_color = {color: rating, opponent_color: opponent_rating}
     board = build_board([row.split() for row in board_rows])
     game_engine = GameEngine(board)
     game_state = GameState(board)
     controller = Controller(game_engine, game_state, board_mapper=_gui_board_mapper(), my_color=color)
-    return game_engine, game_state, controller, network_client
+    return game_engine, game_state, controller, network_client, usernames_by_color, ratings_by_color
 
 
-def build_game_loop(game_engine, game_state, controller, skin=DEFAULT_SKIN, network_client=None):
+def build_game_loop(
+    game_engine, game_state, controller, skin=DEFAULT_SKIN, network_client=None,
+    usernames_by_color=None, ratings_by_color=None,
+):
+    usernames_by_color = usernames_by_color or {}
+    ratings_by_color = ratings_by_color or {}
     board_view = BoardView(skin)
     clock = Clock()
-    white_panel = SidePanel("w", LEFT_PANEL_X, BOARD_SIZE_CELLS, skin=skin)
-    black_panel = SidePanel("b", RIGHT_PANEL_X, BOARD_SIZE_CELLS, skin=skin)
+    white_panel = SidePanel(
+        "w", LEFT_PANEL_X, BOARD_SIZE_CELLS, skin=skin,
+        username=usernames_by_color.get("w"), rating=ratings_by_color.get("w"),
+    )
+    black_panel = SidePanel(
+        "b", RIGHT_PANEL_X, BOARD_SIZE_CELLS, skin=skin,
+        username=usernames_by_color.get("b"), rating=ratings_by_color.get("b"),
+    )
     game_engine.add_observer(white_panel)
     game_engine.add_observer(black_panel)
     sound_player = SoundPlayer()
@@ -147,12 +162,17 @@ def main():
         built = build_online_game(args.server)
         if built is None:
             return
-        game_engine, game_state, controller, network_client = built
+        game_engine, game_state, controller, network_client, usernames_by_color, ratings_by_color = built
     else:
         game_engine, game_state, controller = build_game()
         network_client = None
+        usernames_by_color = None
+        ratings_by_color = None
 
-    game_loop = build_game_loop(game_engine, game_state, controller, skin=skin, network_client=network_client)
+    game_loop = build_game_loop(
+        game_engine, game_state, controller, skin=skin, network_client=network_client,
+        usernames_by_color=usernames_by_color, ratings_by_color=ratings_by_color,
+    )
     game_loop.run()
 
 

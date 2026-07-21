@@ -27,7 +27,8 @@ NO_OPPONENT_TEXT = "No opponent found. Press any key to quit."
 class MatchmakingScreen:
     """Shows a waiting message while polling `network_client` for the
     server's matchmaking result. run() blocks until either:
-      - match_found arrives: returns (color, board_rows)
+      - match_found arrives: returns (color, board_rows, username,
+        opponent_username, rating, opponent_rating)
       - no_opponent_found arrives, or the player quits: returns None
     """
 
@@ -41,7 +42,10 @@ class MatchmakingScreen:
         while True:
             for message in self._network_client.poll_messages():
                 if message["type"] == "match_found":
-                    return message["color"], message["board"]
+                    return (
+                        message["color"], message["board"], message["username"], message["opponent_username"],
+                        message["rating"], message["opponent_rating"],
+                    )
                 if message["type"] == "no_opponent_found":
                     self._show(NO_OPPONENT_TEXT)
                     cv2.waitKey(0)

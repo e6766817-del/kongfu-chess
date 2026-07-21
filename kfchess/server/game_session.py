@@ -76,7 +76,14 @@ class GameSession:
     async def run(self):
         board_rows = render_board(self._engine.board()).split("\n")
         for color, connection in self._connections.items():
-            await self._send(connection, protocol.match_found(color, board_rows))
+            opponent = self._opponent_of(connection)
+            await self._send(
+                connection,
+                protocol.match_found(
+                    color, board_rows, connection.username, opponent.username,
+                    connection.rating, opponent.rating,
+                ),
+            )
 
         while self._active and not self._engine.is_game_over():
             self._engine.advance_clock(self._tick_ms)

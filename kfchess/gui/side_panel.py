@@ -31,19 +31,26 @@ ACCENT_DIM_COLOR = (0, 110, 160, 255)  # BGRA, muted gold (borders/underlines)
 BORDER_EDGE_COLOR = ACCENT_DIM_COLOR
 TEXT_PRIMARY_COLOR = (235, 235, 235, 255)  # BGRA, near-white
 TEXT_SECONDARY_COLOR = (150, 150, 150, 255)  # BGRA, gray
-WHITE_CHIP_BG = (232, 232, 232, 255)
-WHITE_CHIP_TEXT = (20, 20, 20, 255)
-BLACK_CHIP_BG = (58, 56, 55, 255)
-BLACK_CHIP_TEXT = (232, 232, 232, 255)
+WHITE_DOT_COLOR = (232, 232, 232, 255)
+BLACK_DOT_COLOR = (58, 56, 55, 255)
 SLOT_BG_COLOR = (44, 39, 36, 255)
 BADGE_BG_COLOR = (40, 35, 33, 255)
 
 PANEL_TEXT_X_PAD = 16
 
-HEADER_HEIGHT_PX = 46
-CHIP_MARGIN_PX = 8
-CHIP_WIDTH_PX = 84
-CHIP_RADIUS_PX = 8
+# The header is a single full-width nameplate card: a color-indicator
+# dot, the player's username with their rating on a second line below it
+# (or a WHITE/BLACK fallback for local, non-networked play where neither
+# exists), and a small WHITE/BLACK tag in the corner -- replaces the old
+# small fixed-width color chip, which had no room to fit a real username
+# next to it.
+HEADER_HEIGHT_PX = 66
+HEADER_MARGIN_PX = 8
+HEADER_RADIUS_PX = 8
+HEADER_DOT_RADIUS_PX = 7
+HEADER_DOT_PAD_PX = 14
+HEADER_TAG_FONT_SCALE = 0.34
+HEADER_RATING_FONT_SCALE = 0.42
 
 SCORE_BADGE_TOP_Y = HEADER_HEIGHT_PX + 12
 SCORE_BADGE_HEIGHT_PX = 32
@@ -72,11 +79,17 @@ _SLOTS_PER_ROW = max(
 
 
 class SidePanel:
-    def __init__(self, color, panel_x, board_height, skin=DEFAULT_SKIN):
+    def __init__(self, color, panel_x, board_height, skin=DEFAULT_SKIN, username=None, rating=None):
         self._color = color
         self._panel_x = panel_x
         self._board_height = board_height
         self._skin = skin
+        # Set by the networked GUI (kfchess.gui.main.build_online_game),
+        # from the server's match_found reply -- both None for local
+        # (non-online) play, where the WHITE/BLACK label is the only
+        # identity shown.
+        self._username = username
+        self._rating = rating
         self._score = 0
         self._captured = []
         self._moves = []
@@ -138,17 +151,49 @@ class SidePanel:
         cv2.line(canvas.img, (edge_x, 0), (edge_x, panel_height - 1), BORDER_EDGE_COLOR, 2)
 
     def _draw_header(self, canvas):
-        chip_x = self._panel_x + CHIP_MARGIN_PX
-        chip_y = CHIP_MARGIN_PX
-        chip_h = HEADER_HEIGHT_PX - 2 * CHIP_MARGIN_PX
+        """A single full-width nameplate card: a color-indicator dot,
+        the player's username as the headline (falling back to WHITE/
+        BLACK when no username is known, i.e. local non-networked play),
+        and -- only once a username is actually shown -- a small WHITE/
+        BLACK tag in the card's corner so the color is never ambiguous."""
+        card_x = self._panel_x + HEADER_MARGIN_PX
+        card_y = HEADER_MARGIN_PX
+        card_w = SIDE_PANEL_WIDTH_PX - 2 * HEADER_MARGIN_PX
+        card_h = HEADER_HEIGHT_PX - 2 * HEADER_MARGIN_PX
         is_white = self._color == "w"
-        chip_bg = WHITE_CHIP_BG if is_white else BLACK_CHIP_BG
-        chip_text = WHITE_CHIP_TEXT if is_white else BLACK_CHIP_TEXT
-        _rounded_rect(canvas.img, chip_x, chip_y, CHIP_WIDTH_PX, chip_h, CHIP_RADIUS_PX, chip_bg)
-        cv2.rectangle(canvas.img, (chip_x, chip_y), (chip_x + CHIP_WIDTH_PX, chip_y + chip_h), ACCENT_DIM_COLOR, 1)
-        label = "WHITE" if is_white else "BLACK"
-        text_y = chip_y + chip_h - 10
-        canvas.put_text(label, chip_x + 10, text_y, 0.55, color=chip_text, thickness=2)
+
+        _rounded_rect(canvas.img, card_x, card_y, card_w, card_h, HEADER_RADIUS_PX, BADGE_BG_COLOR)
+        _rounded_rect(
+            canvas.img, card_x, card_y, card_w, card_h, HEADER_RADIUS_PX, ACCENT_DIM_COLOR, thickness=1,
+        )
+
+        dot_color = WHITE_DOT_COLOR if is_white else BLACK_DOT_COLOR
+        dot_cx = card_x + HEADER_DOT_PAD_PX
+        dot_cy = card_y + card_h // 2
+        cv2.circle(canvas.img, (dot_cx, dot_cy), HEADER_DOT_RADIUS_PX, dot_color, -1)
+        cv2.circle(canvas.img, (dot_cx, dot_cy), HEADER_DOT_RADIUS_PX, ACCENT_DIM_COLOR, 1)
+
+        color_tag = "WHITE" if is_white else "BLACK"
+        text_x = dot_cx + HEADER_DOT_RADIUS_PX + 10
+
+        if self._username:
+            tag_w, _ = cv2.getTextSize(color_tag, cv2.FONT_HERSHEY_SIMPLEX, HEADER_TAG_FONT_SCALE, 1)[0]
+            tag_x = card_x + card_w - tag_w - 10
+            canvas.put_text(color_tag, tag_x, card_y + 16, HEADER_TAG_FONT_SCALE, color=ACCENT_COLOR, thickness=1)
+
+            max_width = tag_x - text_x - 8
+            display_name = _truncate_to_width(self._username, max_width, 0.58, 2)
+            canvas.put_text(display_name, text_x, card_y + 30, 0.58, color=TEXT_PRIMARY_COLOR, thickness=2)
+
+            if self._rating is not None:
+                rating_text = f"Rating {self._rating}"
+                canvas.put_text(
+                    rating_text, text_x, card_y + card_h - 10, HEADER_RATING_FONT_SCALE,
+                    color=TEXT_SECONDARY_COLOR, thickness=1,
+                )
+        else:
+            baseline_y = card_y + card_h // 2 + 6
+            canvas.put_text(color_tag, text_x, baseline_y, 0.58, color=TEXT_PRIMARY_COLOR, thickness=2)
 
     def _draw_score_badge(self, canvas, x):
         badge_w = SIDE_PANEL_WIDTH_PX - 2 * PANEL_TEXT_X_PAD
@@ -204,6 +249,23 @@ class SidePanel:
             icon_size = (CAPTURED_ICON_SIZE_PX, CAPTURED_ICON_SIZE_PX)
             self._icons_by_piece_type[piece_type] = Img().read(path, size=icon_size, keep_aspect=True)
         return self._icons_by_piece_type[piece_type]
+
+
+def _truncate_to_width(text, max_width, font_scale, thickness):
+    """Shortens `text` with a trailing ellipsis until it fits max_width
+    px at the given font settings -- a long username otherwise runs off
+    the nameplate card into the tag or off the panel edge entirely."""
+    if max_width <= 0:
+        return ""
+    width, _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0]
+    if width <= max_width:
+        return text
+    for cut in range(len(text) - 1, 0, -1):
+        candidate = text[:cut] + "..."
+        width, _ = cv2.getTextSize(candidate, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0]
+        if width <= max_width:
+            return candidate
+    return "..."
 
 
 def _rounded_rect(img, x, y, w, h, radius, color, thickness=-1):

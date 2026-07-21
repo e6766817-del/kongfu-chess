@@ -38,7 +38,7 @@ FIRST_FIELD_Y = 160
 class LoginScreen:
     """Shows username/password fields, then blocks waiting for the
     server's login reply once submitted. run() returns (username,
-    password) once login succeeds, or None if the player quits."""
+    password, rating) once login succeeds, or None if the player quits."""
 
     def __init__(self, network_client):
         self._network_client = network_client
@@ -86,7 +86,7 @@ class LoginScreen:
     def _poll_login_reply(self):
         for message in self._network_client.poll_messages():
             if message["type"] == "login_ok":
-                return self._fields["username"], self._fields["password"]
+                return self._fields["username"], self._fields["password"], message["rating"]
             if message["type"] == "login_error":
                 self._waiting = False
                 self._error_message = message["message"]
