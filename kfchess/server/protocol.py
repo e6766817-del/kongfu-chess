@@ -116,7 +116,13 @@ class GameOver:
 
 @dataclass
 class OpponentDisconnected:
+    resign_in_seconds: float
     type: str = "opponent_disconnected"
+
+
+@dataclass
+class OpponentResigned:
+    type: str = "opponent_resigned"
 
 
 @dataclass
@@ -182,8 +188,12 @@ def game_over(winner=None):
     return GameOver(winner=winner)
 
 
-def opponent_disconnected():
-    return OpponentDisconnected()
+def opponent_disconnected(resign_in_seconds):
+    return OpponentDisconnected(resign_in_seconds=resign_in_seconds)
+
+
+def opponent_resigned():
+    return OpponentResigned()
 
 
 def error(message):

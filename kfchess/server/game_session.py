@@ -27,6 +27,8 @@ STARTING_GRID = [
     "wR wN wB wQ wK wB wN wR".split(),
 ]
 
+DISCONNECT_RESIGN_SECONDS = 20.0
+
 
 class _BroadcastObserver(ArbiterObserver):
     """Queues broadcast messages instead of sending them directly --
@@ -45,7 +47,7 @@ class _BroadcastObserver(ArbiterObserver):
 
 
 class GameSession:
-    def __init__(self, white, black, account_store, tick_ms=50):
+    def __init__(self, white, black, account_store, tick_ms=50, disconnect_resign_seconds=DISCONNECT_RESIGN_SECONDS):
         board = build_board(STARTING_GRID)
         self._engine = GameEngine(board)
         self._outgoing = []
@@ -54,6 +56,7 @@ class GameSession:
         self._connections = {"w": white, "b": black}
         self._account_store = account_store
         self._tick_ms = tick_ms
+        self._disconnect_resign_seconds = disconnect_resign_seconds
         # Set once by handle_disconnect (a player's socket closing mid-game)
         # or once the game reaches a natural end -- either way, run()'s tick
         # loop stops and no further per-tick broadcasts are sent.
@@ -104,11 +107,18 @@ class GameSession:
         """Called once a player's socket closes -- stops run()'s tick loop
         (a disconnected game shouldn't keep ticking for a lone remaining
         player) and tells the other connection why, instead of just going
-        silent or letting them play on alone."""
+        silent or letting them play on alone. There is no reconnect
+        concept in this codebase (see session.py), so after a grace
+        period the disconnected player is auto-resigned and the result is
+        recorded."""
         if not self._active:
             return
         self._active = False
-        await self._send(self._opponent_of(connection), protocol.opponent_disconnected())
+        opponent = self._opponent_of(connection)
+        await self._send(opponent, protocol.opponent_disconnected(self._disconnect_resign_seconds))
+        await asyncio.sleep(self._disconnect_resign_seconds)
+        await self._send(opponent, protocol.opponent_resigned())
+        self._account_store.record_result(opponent.username, connection.username)
 
     async def handle_client_message(self, connection, message):
         message_type = message.get("type")

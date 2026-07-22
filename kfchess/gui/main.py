@@ -27,6 +27,7 @@ from kfchess.gui.config import (
     RIGHT_PANEL_X,
 )
 from kfchess.gui.game_loop import GameLoop
+from kfchess.gui.home_screen import HomeScreen
 from kfchess.gui.hud_message import HudMessage
 from kfchess.gui.login_screen import LoginScreen
 from kfchess.gui.matchmaking_screen import MatchmakingScreen
@@ -85,7 +86,11 @@ def build_online_game(server_uri):
     usernames_by_color, ratings_by_color), or None if the player quits at
     either step."""
     network_client = NetworkClient(server_uri)
-    if LoginScreen(network_client).run() is None:
+    login_result = LoginScreen(network_client).run()
+    if login_result is None:
+        return None
+    username, _password, rating = login_result
+    if HomeScreen(username, rating).run() is None:
         return None
     network_client.join_queue()
 

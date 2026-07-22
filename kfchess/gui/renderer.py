@@ -26,6 +26,12 @@ COOLDOWN_TEXT_COLOR = (255, 255, 255, 255)  # BGRA, white
 COOLDOWN_FONT_SCALE = 0.9
 COOLDOWN_THICKNESS = 2
 
+DISCONNECT_DIM_COLOR = (0, 0, 0, 255)  # BGRA, black
+DISCONNECT_DIM_ALPHA = 0.4
+DISCONNECT_TEXT_COLOR = (255, 255, 255, 255)  # BGRA, white
+DISCONNECT_FONT_SCALE = 0.9
+DISCONNECT_THICKNESS = 2
+
 
 class Renderer:
     def __init__(self, board_view, clock, side_panels, hud_message):
@@ -135,4 +141,25 @@ class Renderer:
         cv2.putText(
             canvas.img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX,
             GAME_OVER_FONT_SCALE, GAME_OVER_TEXT_COLOR, GAME_OVER_THICKNESS, cv2.LINE_AA,
+        )
+
+    def draw_countdown_banner(self, canvas, seconds_left):
+        """Dim the whole frame (lighter than draw_banner's GAME OVER dim,
+        since the board is frozen but not over yet) and stamp a centered
+        auto-resign countdown -- called every frame while GameLoop is
+        frozen waiting out the opponent's disconnect grace period."""
+        height, width = canvas.img.shape[:2]
+        dim_layer = canvas.img.copy()
+        dim_layer[:, :] = DISCONNECT_DIM_COLOR[: canvas.img.shape[2]]
+        cv2.addWeighted(dim_layer, DISCONNECT_DIM_ALPHA, canvas.img, 1 - DISCONNECT_DIM_ALPHA, 0, canvas.img)
+
+        text = f"Opponent disconnected. Auto-resigning in {seconds_left:.0f}s..."
+        (text_w, text_h), _baseline = cv2.getTextSize(
+            text, cv2.FONT_HERSHEY_SIMPLEX, DISCONNECT_FONT_SCALE, DISCONNECT_THICKNESS
+        )
+        x = (width - text_w) // 2
+        y = (height + text_h) // 2
+        cv2.putText(
+            canvas.img, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX,
+            DISCONNECT_FONT_SCALE, DISCONNECT_TEXT_COLOR, DISCONNECT_THICKNESS, cv2.LINE_AA,
         )

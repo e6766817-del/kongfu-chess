@@ -63,11 +63,14 @@ class GameLoop:
         # opponent_move/opponent_jump messages, replayed into this same
         # local GameEngine so both clients animate identically.
         self._network_client = network_client
-        # Set by _poll_network on an opponent_disconnected message -- run()
-        # checks this each frame and stops updating the game (no more
-        # advance_clock/animation/input) instead of quietly playing on
-        # alone, then freezes on a banner over the last rendered frame.
-        self._opponent_disconnected = False
+        # Set by _poll_network on an opponent_disconnected message to a
+        # perf_counter deadline -- run() freezes (no more advance_clock/
+        # animation/input) and shows a live countdown banner until either
+        # an opponent_resigned message arrives (auto-resign after the
+        # server's grace period -- there is no reconnect concept in this
+        # codebase, see kfchess.server.session) or the player quits.
+        self._disconnect_deadline = None
+        self._opponent_resigned = False
         self._animations_by_piece_id = {}
         # piece_id -> origin Position, while its MOVE animation waits for arrival
         self._in_flight_moves = {}
@@ -90,18 +93,22 @@ class GameLoop:
 
                 if self._network_client is not None:
                     self._poll_network()
-                if self._opponent_disconnected:
+                if self._opponent_resigned:
                     break
 
-                self._game_engine.advance_clock(dt_ms)
-                self._engine_clock_ms += dt_ms
-                board = self._game_engine.board()
+                frozen = self._disconnect_deadline is not None
+                if frozen:
+                    board = self._game_engine.board()
+                else:
+                    self._game_engine.advance_clock(dt_ms)
+                    self._engine_clock_ms += dt_ms
+                    board = self._game_engine.board()
 
-                self._sync_animations(board)
-                self._settle_in_flight_moves()
-                self._settle_resting_pieces(board)
-                for animation in self._animations_by_piece_id.values():
-                    animation.advance(dt_ms)
+                    self._sync_animations(board)
+                    self._settle_in_flight_moves()
+                    self._settle_resting_pieces(board)
+                    for animation in self._animations_by_piece_id.values():
+                        animation.advance(dt_ms)
 
                 game_over = self._game_engine.is_game_over()
                 cooldown_remaining_ms_by_position = self._cooldown_remaining_ms_by_position(board)
@@ -113,6 +120,9 @@ class GameLoop:
                     move_destinations=move_destinations,
                     capture_destinations=capture_destinations,
                 )
+                if frozen:
+                    seconds_left = max(0.0, self._disconnect_deadline - time.perf_counter())
+                    self._renderer.draw_countdown_banner(frame, seconds_left)
                 cv2.imshow(WINDOW_NAME, frame.img)
 
                 key = cv2.waitKey(1) & 0xFF
@@ -120,17 +130,17 @@ class GameLoop:
                     break
                 if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
                     break
-                if game_over:
+                if game_over and not frozen:
                     self._sound_player.play_game_over()
                     self._hold_game_over_screen()
                     break
 
-            if self._opponent_disconnected:
+            if self._opponent_resigned:
                 if frame is None:
                     frame = self._renderer.render(
                         self._game_engine.board(), self._animations_by_piece_id, 0, self._game_state.selected_position
                     )
-                self._renderer.draw_banner(frame, "Opponent disconnected.")
+                self._renderer.draw_banner(frame, "Opponent disconnected. You win.")
                 cv2.imshow(WINDOW_NAME, frame.img)
                 self._hold_game_over_screen()
         finally:
@@ -172,7 +182,9 @@ class GameLoop:
             elif message_type == "move_result" and not message["accepted"]:
                 self._hud_message.show(message["reason"])
             elif message_type == "opponent_disconnected":
-                self._opponent_disconnected = True
+                self._disconnect_deadline = time.perf_counter() + message["resign_in_seconds"]
+            elif message_type == "opponent_resigned":
+                self._opponent_resigned = True
 
     def _sync_animations(self, board):
         """Create a PieceAnimationState (idle) for any newly-seen piece,
@@ -259,6 +271,8 @@ class GameLoop:
             self._handle_jump_click(x, y)
 
     def _handle_move_click(self, x, y):
+        if self._disconnect_deadline is not None:
+            return
         prior_selection = self._game_state.selected_position
         self._controller.handle_click_at_pixel(x, y)
 
@@ -280,6 +294,8 @@ class GameLoop:
         self._start_move_animation(prior_selection, destination, result.arrival_time_ms)
 
     def _handle_jump_click(self, x, y):
+        if self._disconnect_deadline is not None:
+            return
         position = pixel_to_cell(x, y, x_offset=BOARD_X_OFFSET_PX, y_offset=BOARD_Y_OFFSET_PX)
         was_locked = self._game_engine.is_locked(position)
         self._controller.handle_jump_at_pixel(x, y)

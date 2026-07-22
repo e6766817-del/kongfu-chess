@@ -1,34 +1,38 @@
-"""MatchmakingQueue: pairs exactly two waiting connections at a time.
+"""MatchmakingQueue: pairs waiting connections whose ratings are within
+RATING_RANGE of each other.
 
-This is strictly 2-player pairing, not general N-way matchmaking, so
-a single "waiting slot" guarded by a lock is enough -- asyncio.Queue
-machinery would be unnecessary here.
+A single "waiting slot" isn't enough once rating matters -- two waiting
+players outside each other's range must both stay queued until a
+compatible third arrival, so this keeps a list instead.
 """
 
 import asyncio
 
+RATING_RANGE = 100
+
 
 class MatchmakingQueue:
     def __init__(self):
-        self._waiting = None
+        self._waiting = []
         self._lock = asyncio.Lock()
 
     async def join(self, connection):
-        """Returns the opponent immediately if someone was already
-        waiting (pairing the two under the lock), or records
-        `connection` as the new waiting slot and returns None."""
+        """Returns the first already-waiting connection within
+        RATING_RANGE of `connection`'s rating (pairing the two under the
+        lock), or appends `connection` to the waiting list and returns
+        None."""
         async with self._lock:
-            opponent = self._waiting
-            if opponent is None:
-                self._waiting = connection
-                return None
-            self._waiting = None
-            return opponent
+            for opponent in self._waiting:
+                if abs(opponent.rating - connection.rating) <= RATING_RANGE:
+                    self._waiting.remove(opponent)
+                    return opponent
+            self._waiting.append(connection)
+            return None
 
     async def cancel_waiting(self, connection):
-        """Clears the waiting slot if `connection` is still the one
-        recorded as waiting -- called on timeout so a timed-out
-        connection can never be paired with a later arrival."""
+        """Removes `connection` from the waiting list if it's still
+        there -- called on timeout so a timed-out connection can never be
+        paired with a later arrival."""
         async with self._lock:
-            if self._waiting is connection:
-                self._waiting = None
+            if connection in self._waiting:
+                self._waiting.remove(connection)
