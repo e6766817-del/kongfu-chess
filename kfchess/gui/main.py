@@ -30,15 +30,23 @@ from kfchess.gui.game_loop import GameLoop
 from kfchess.gui.home_screen import HomeScreen
 from kfchess.gui.hud_message import HudMessage
 from kfchess.gui.login_screen import LoginScreen
+from kfchess.gui.logging_config import setup_logging
 from kfchess.gui.matchmaking_screen import MatchmakingScreen
 from kfchess.gui.network_client import NetworkClient
 from kfchess.gui.piece_sprites import SpriteSetCache
 from kfchess.gui.renderer import Renderer
+from kfchess.gui.room_dialog import RoomDialog
 from kfchess.gui.side_panel import SidePanel
 from kfchess.gui.skin_menu import SkinMenu
 from kfchess.gui.sound import SoundPlayer
 
 DEFAULT_SERVER_URI = "ws://localhost:8765"
+
+# Sentinel my_color passed to Controller for spectators -- never equals "w"
+# or "b", so Controller._is_own_piece is always False and clicks are a
+# no-op, without needing any spectator-specific branching in Controller or
+# GameLoop (see kfchess.input.controller).
+VIEWER_COLOR = "v"
 
 # Standard chess starting position, in the "<color><kind>" token format
 # kfchess.io.validator.build_board expects (see kfchess.io.pieces_config).
@@ -75,37 +83,62 @@ def build_game():
 
 def build_online_game(server_uri):
     """Connects to kfchess.server, blocks in the login screen until the
-    player logs in (or quits), then blocks in the matchmaking screen
-    until a match is found (or the player quits / times out), then
-    builds the same GameEngine/GameState/Controller trio as local play
-    -- Controller is given my_color so it only ever acts on this
-    client's own pieces, and GameLoop is given the NetworkClient so it
+    player logs in (or quits), then blocks in the Home screen until the
+    player picks Play (anonymous rating-based matchmaking) or Room
+    (create/join a specific room, possibly as a read-only viewer -- see
+    kfchess.gui.room_dialog), then builds the same GameEngine/GameState/
+    Controller trio either way -- Controller is given my_color so it only
+    ever acts on this client's own pieces (or, for a viewer, never acts at
+    all -- see VIEWER_COLOR), and GameLoop is given the NetworkClient so it
     can send this player's moves and replay the opponent's.
 
     Returns (game_engine, game_state, controller, network_client,
     usernames_by_color, ratings_by_color), or None if the player quits at
-    either step."""
+    any step."""
     network_client = NetworkClient(server_uri)
     login_result = LoginScreen(network_client).run()
     if login_result is None:
         return None
     username, _password, rating = login_result
-    if HomeScreen(username, rating).run() is None:
-        return None
-    network_client.join_queue()
 
-    matched = MatchmakingScreen(network_client).run()
+    action = HomeScreen(username, rating).run()
+    if action is None:
+        return None
+
+    if action == "room":
+        matched = RoomDialog(network_client).run()
+    else:
+        network_client.join_queue()
+        result = MatchmakingScreen(network_client).run()
+        matched = None if result is None else ("player",) + result
+
     if matched is None:
         return None
+    return _build_from_match(matched, network_client)
 
-    color, board_rows, username, opponent_username, rating, opponent_rating = matched
-    opponent_color = "b" if color == "w" else "w"
-    usernames_by_color = {color: username, opponent_color: opponent_username}
-    ratings_by_color = {color: rating, opponent_color: opponent_rating}
+
+def _build_from_match(matched, network_client):
+    """Builds the GameEngine/GameState/Controller trio from either a
+    ("player", ...) result (MatchmakingScreen or RoomDialog, when this
+    client is White or Black) or a ("viewer", ...) result (RoomDialog,
+    the 3rd+ joiner of a room)."""
+    kind = matched[0]
+    if kind == "player":
+        _, color, board_rows, username, opponent_username, rating, opponent_rating = matched
+        opponent_color = "b" if color == "w" else "w"
+        usernames_by_color = {color: username, opponent_color: opponent_username}
+        ratings_by_color = {color: rating, opponent_color: opponent_rating}
+        my_color = color
+    else:
+        _, board_rows, white_username, black_username, white_rating, black_rating = matched
+        usernames_by_color = {"w": white_username, "b": black_username}
+        ratings_by_color = {"w": white_rating, "b": black_rating}
+        my_color = VIEWER_COLOR
+
     board = build_board([row.split() for row in board_rows])
     game_engine = GameEngine(board)
     game_state = GameState(board)
-    controller = Controller(game_engine, game_state, board_mapper=_gui_board_mapper(), my_color=color)
+    controller = Controller(game_engine, game_state, board_mapper=_gui_board_mapper(), my_color=my_color)
     return game_engine, game_state, controller, network_client, usernames_by_color, ratings_by_color
 
 
@@ -157,6 +190,8 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.server is not None:
+        setup_logging()
     skin = args.skin
     if skin is None:
         skin = SkinMenu().run()

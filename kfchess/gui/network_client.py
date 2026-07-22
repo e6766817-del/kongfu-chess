@@ -8,10 +8,13 @@ run_coroutine_threadsafe onto the background thread's own event loop.
 
 import asyncio
 import json
+import logging
 import queue
 import threading
 
 import websockets
+
+logger = logging.getLogger("kfchess.client")
 
 
 class NetworkClient:
@@ -32,10 +35,14 @@ class NetworkClient:
 
     async def _main(self):
         async with websockets.connect(self._uri) as websocket:
+            logger.info("connected to %s", self._uri)
             self._websocket = websocket
             self._connected.set()
             async for raw_message in websocket:
-                self._incoming.put(json.loads(raw_message))
+                message = json.loads(raw_message)
+                logger.info("RECV: %s", message)
+                self._incoming.put(message)
+        logger.info("disconnected from %s", self._uri)
 
     def poll_messages(self):
         """Non-blocking: returns all messages received since the last
@@ -54,6 +61,12 @@ class NetworkClient:
     def join_queue(self):
         self._send({"type": "join_queue"})
 
+    def create_room(self):
+        self._send({"type": "create_room"})
+
+    def join_room(self, room_id):
+        self._send({"type": "join_room", "room_id": room_id})
+
     def send_move(self, from_position, to_position):
         self._send({
             "type": "move",
@@ -65,4 +78,5 @@ class NetworkClient:
         self._send({"type": "jump", "position": [position.row, position.col]})
 
     def _send(self, message):
+        logger.info("SEND: %s", message)
         asyncio.run_coroutine_threadsafe(self._websocket.send(json.dumps(message)), self._loop)

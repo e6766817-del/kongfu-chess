@@ -26,25 +26,27 @@ BUTTON_TEXT_COLOR = (235, 235, 235, 255)
 BUTTON_WIDTH_PX = 200
 BUTTON_HEIGHT_PX = 70
 BUTTON_TOP_Y = 230
-BUTTON_LABEL = "Play"
+BUTTON_GAP_PX = 20
+PLAY_BUTTON_LABEL = "Play"
+ROOM_BUTTON_LABEL = "Room"
 
 
 class HomeScreen:
-    """Shows the player's username/rating and a Play button. run() blocks
-    until the player clicks Play (returns True) or quits (returns
-    None)."""
+    """Shows the player's username/rating and Play/Room buttons. run()
+    blocks until the player clicks a button (returns "play" or "room") or
+    quits (returns None)."""
 
     def __init__(self, username, rating):
         self._username = username
         self._rating = rating
-        self._hovered = False
-        self._play_clicked = False
+        self._hovered_button = None
+        self._clicked_action = None
 
     def run(self):
         cv2.namedWindow(WINDOW_NAME)
         cv2.setMouseCallback(WINDOW_NAME, self._on_mouse)
 
-        while not self._play_clicked:
+        while self._clicked_action is None:
             canvas = self._render()
             cv2.imshow(WINDOW_NAME, canvas.img)
             key = cv2.waitKey(16) & 0xFF
@@ -52,12 +54,16 @@ class HomeScreen:
                 return None
             if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
                 return None
-        return True
+        return self._clicked_action
 
-    def _button_rect(self):
+    def _button_rects(self):
         canvas_w, _ = CANVAS_SIZE_PX
-        x = (canvas_w - BUTTON_WIDTH_PX) // 2
-        return x, BUTTON_TOP_Y, BUTTON_WIDTH_PX, BUTTON_HEIGHT_PX
+        total_width = 2 * BUTTON_WIDTH_PX + BUTTON_GAP_PX
+        start_x = (canvas_w - total_width) // 2
+        return {
+            "play": (start_x, BUTTON_TOP_Y, BUTTON_WIDTH_PX, BUTTON_HEIGHT_PX),
+            "room": (start_x + BUTTON_WIDTH_PX + BUTTON_GAP_PX, BUTTON_TOP_Y, BUTTON_WIDTH_PX, BUTTON_HEIGHT_PX),
+        }
 
     def _render(self):
         canvas_w, canvas_h = CANVAS_SIZE_PX
@@ -73,21 +79,27 @@ class HomeScreen:
         (rating_w, _), _ = cv2.getTextSize(rating_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
         canvas.put_text(rating_text, (canvas_w - rating_w) // 2, 140, 0.7, color=HINT_COLOR, thickness=2)
 
-        x, y, w, h = self._button_rect()
-        bg_color = BUTTON_HOVER_BG_COLOR if self._hovered else BUTTON_BG_COLOR
-        border_color = BUTTON_HOVER_BORDER_COLOR if self._hovered else BUTTON_BORDER_COLOR
-        cv2.rectangle(canvas.img, (x, y), (x + w, y + h), bg_color, -1)
-        cv2.rectangle(canvas.img, (x, y), (x + w, y + h), border_color, 2)
-        (label_w, label_h), _ = cv2.getTextSize(BUTTON_LABEL, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)
-        canvas.put_text(
-            BUTTON_LABEL, x + (w - label_w) // 2, y + (h + label_h) // 2, 0.9,
-            color=BUTTON_TEXT_COLOR, thickness=2,
-        )
+        labels = {"play": PLAY_BUTTON_LABEL, "room": ROOM_BUTTON_LABEL}
+        for action, (x, y, w, h) in self._button_rects().items():
+            is_hovered = self._hovered_button == action
+            bg_color = BUTTON_HOVER_BG_COLOR if is_hovered else BUTTON_BG_COLOR
+            border_color = BUTTON_HOVER_BORDER_COLOR if is_hovered else BUTTON_BORDER_COLOR
+            cv2.rectangle(canvas.img, (x, y), (x + w, y + h), bg_color, -1)
+            cv2.rectangle(canvas.img, (x, y), (x + w, y + h), border_color, 2)
+            label = labels[action]
+            (label_w, label_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)
+            canvas.put_text(
+                label, x + (w - label_w) // 2, y + (h + label_h) // 2, 0.9,
+                color=BUTTON_TEXT_COLOR, thickness=2,
+            )
 
         return canvas
 
     def _on_mouse(self, event, x, y, flags, param):
-        bx, by, bw, bh = self._button_rect()
-        self._hovered = bx <= x < bx + bw and by <= y < by + bh
-        if event == cv2.EVENT_LBUTTONDOWN and self._hovered:
-            self._play_clicked = True
+        self._hovered_button = None
+        for action, (bx, by, bw, bh) in self._button_rects().items():
+            if bx <= x < bx + bw and by <= y < by + bh:
+                self._hovered_button = action
+                break
+        if event == cv2.EVENT_LBUTTONDOWN and self._hovered_button is not None:
+            self._clicked_action = self._hovered_button

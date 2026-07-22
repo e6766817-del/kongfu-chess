@@ -61,6 +61,26 @@ class NoOpponentFound:
 
 
 @dataclass
+class RoomCreated:
+    room_id: str
+    type: str = "room_created"
+
+
+@dataclass
+class SpectateStart:
+    """Sent to a viewer instead of MatchFound -- a viewer has no color of
+    its own, so it needs both players' usernames/ratings up front rather
+    than a "you"/"opponent" framing."""
+
+    board: list
+    white_username: str
+    black_username: str
+    white_rating: int
+    black_rating: int
+    type: str = "spectate_start"
+
+
+@dataclass
 class MoveResult:
     accepted: bool
     reason: Optional[str] = None
@@ -152,6 +172,17 @@ def match_found(color, board_rows, username, opponent_username, rating, opponent
 
 def no_opponent_found():
     return NoOpponentFound()
+
+
+def room_created(room_id):
+    return RoomCreated(room_id=room_id)
+
+
+def spectate_start(board_rows, white_username, black_username, white_rating, black_rating):
+    return SpectateStart(
+        board=board_rows, white_username=white_username, black_username=black_username,
+        white_rating=white_rating, black_rating=black_rating,
+    )
 
 
 def move_result(accepted, reason=None, arrival_time_ms=None):

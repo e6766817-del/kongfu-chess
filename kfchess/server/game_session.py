@@ -6,6 +6,7 @@ connections.
 
 import asyncio
 import json
+import logging
 
 import websockets
 
@@ -15,6 +16,8 @@ from kfchess.io.validator import build_board
 from kfchess.model.position import Position
 from kfchess.realtime.observers import ArbiterObserver
 from kfchess.server import protocol
+
+logger = logging.getLogger("kfchess.server")
 
 STARTING_GRID = [
     "bR bN bB bQ bK bB bN bR".split(),
@@ -47,13 +50,21 @@ class _BroadcastObserver(ArbiterObserver):
 
 
 class GameSession:
-    def __init__(self, white, black, account_store, tick_ms=50, disconnect_resign_seconds=DISCONNECT_RESIGN_SECONDS):
+    def __init__(
+        self, white, black, account_store, tick_ms=50, disconnect_resign_seconds=DISCONNECT_RESIGN_SECONDS,
+        viewers=None,
+    ):
         board = build_board(STARTING_GRID)
         self._engine = GameEngine(board)
         self._outgoing = []
         self._engine.add_observer(_BroadcastObserver(self._outgoing))
         white.color, black.color = "w", "b"
         self._connections = {"w": white, "b": black}
+        # Read-only spectators -- see kfchess.server.rooms. Never have a
+        # color, never sent moves, but receive every broadcast a player
+        # does (match/spectate start, opponent moves, settlement, game
+        # over).
+        self._viewers = list(viewers or [])
         self._account_store = account_store
         self._tick_ms = tick_ms
         self._disconnect_resign_seconds = disconnect_resign_seconds
@@ -67,14 +78,27 @@ class GameSession:
         # not a session-ending error -- swallow it so the tick loop keeps
         # running (and the other player's own requests keep getting
         # replies) rather than crashing the whole session task.
+        logger.info("SEND %s: %s", connection.username, message)
         try:
             await connection.websocket.send(json.dumps(message, cls=protocol.Encoder))
         except websockets.exceptions.ConnectionClosed:
             pass
 
     async def _broadcast(self, message):
-        for connection in self._connections.values():
+        for connection in list(self._connections.values()) + self._viewers:
             await self._send(connection, message)
+
+    async def add_viewer(self, connection):
+        """Called for a joiner arriving after the game has already
+        started (kfchess.server.rooms) -- catches them up with the
+        current board state, then folds them into future broadcasts."""
+        board_rows = render_board(self._engine.board()).split("\n")
+        white, black = self._connections["w"], self._connections["b"]
+        await self._send(
+            connection,
+            protocol.spectate_start(board_rows, white.username, black.username, white.rating, black.rating),
+        )
+        self._viewers.append(connection)
 
     async def run(self):
         board_rows = render_board(self._engine.board()).split("\n")
@@ -86,6 +110,12 @@ class GameSession:
                     color, board_rows, connection.username, opponent.username,
                     connection.rating, opponent.rating,
                 ),
+            )
+        white, black = self._connections["w"], self._connections["b"]
+        for viewer in self._viewers:
+            await self._send(
+                viewer,
+                protocol.spectate_start(board_rows, white.username, black.username, white.rating, black.rating),
             )
 
         while self._active and not self._engine.is_game_over():
@@ -111,6 +141,9 @@ class GameSession:
         concept in this codebase (see session.py), so after a grace
         period the disconnected player is auto-resigned and the result is
         recorded."""
+        if connection in self._viewers:
+            self._viewers.remove(connection)
+            return
         if not self._active:
             return
         self._active = False
@@ -122,6 +155,10 @@ class GameSession:
 
     async def handle_client_message(self, connection, message):
         message_type = message.get("type")
+        logger.info("RECV %s: %s", connection.username, message)
+        if connection.color is None:
+            await self._send(connection, protocol.error("spectators cannot move"))
+            return
         if message_type == "move":
             from_position = Position(*message["from"])
             to_position = Position(*message["to"])
@@ -149,7 +186,10 @@ class GameSession:
         await self._send(connection, protocol.move_result(result.accepted, result.reason, result.arrival_time_ms))
         if result.accepted:
             opponent = self._opponent_of(connection)
-            await self._send(opponent, on_accept(piece))
+            message = on_accept(piece)
+            await self._send(opponent, message)
+            for viewer in self._viewers:
+                await self._send(viewer, message)
 
     def _opponent_of(self, connection):
         return self._connections["b"] if connection is self._connections["w"] else self._connections["w"]
